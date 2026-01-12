@@ -3,135 +3,107 @@ import yfinance as yf
 import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
-from concurrent.futures import ThreadPoolExecutor
+import os
 
-# Configuração de página
+# Configuração para Celular
 st.set_page_config(page_title="SISTEMA B3 VIP GOLD", layout="wide")
 
-# ==========================================
-# GESTÃO DE ACESSO (VIA SECRETS)
-# ==========================================
-def login():
-    if "auth" not in st.session_state:
-        st.session_state.auth = False
+# =========================
+# SISTEMA DE LOGIN (SECRETS)
+# =========================
+if "auth" not in st.session_state:
+    st.session_state.auth = False
 
-    if not st.session_state.auth:
-        st.markdown("<h1 style='text-align: center; color: #FFD700;'>🛡️ TERMINAL VIP GOLD</h1>", unsafe_allow_html=True)
-        st.markdown("<p style='text-align: center;'>Acesso restrito a assinantes ativos.</p>", unsafe_allow_html=True)
+if not st.session_state.auth:
+    st.markdown("<h2 style='text-align: center;'>🔐 ACESSO RESTRITO</h2>", unsafe_allow_html=True)
+    col_l1, col_l2, col_l3 = st.columns([1,2,1])
+    with col_l2:
+        # Pega a senha do Hugging Face Secrets. Se não configurada, usa a padrão.
+        SENHA_MESTRA = os.environ.get("MASTER_PASSWORD", "mestre10")
         
-        col1, col2, col3 = st.columns([1,1,1])
-        with col2:
-            # Pega a senha das configurações secretas do Hugging Face
-            # Se não configurar lá, o padrão será 'mestre10'
-            try:
-                senha_correta = st.secrets["MASTER_PASSWORD"]
-            except:
-                senha_correta = "mestre10" 
-                
-            senha_input = st.text_input("Digite sua Chave Mensal:", type="password")
-            if st.button("AUTENTICAR"):
-                if senha_input == senha_correta:
-                    st.session_state.auth = True
-                    st.rerun()
-                else:
-                    st.error("Chave inválida ou expirada!")
-        st.stop()
+        senha = st.text_input("Digite a Senha Mestra:", type="password")
+        if st.button("DESBLOQUEAR SISTEMA", use_container_width=True):
+            if senha == SENHA_MESTRA:
+                st.session_state.auth = True
+                st.rerun()
+            else:
+                st.error("Senha Incorreta!")
+    st.stop()
 
-login()
+# =========================
+# SUA LISTA ORIGINAL (+200 ATIVOS)
+# =========================
+LISTA_TOTAL_B3 = [
+    "RRRP3", "ALOS3", "ALPA4", "ABEV3", "ARZZ3", "ASAI3", "AZUL4", "B3SA3", "BBAS3", "BBDC3", "BBDC4", "BBSE3", "BEEF3", "BPAC11", "BRAP4", "BRFS3", "BRKM5", "CCRO3", "CIEL3", "CMIG4", "CMIN3", "COGN3", "CPFE3", "CPLE6", "CSAN3", "CSNA3", "CVCB3", "CYRE3", "DXCO3", "ELET3", "ELET6", "EMBR3", "ENGI11", "ENEV3", "EGIE3", "EQTL3", "EZTC3", "FLRY3", "GGBR4", "GOAU4", "GOLL4", "HAPV3", "HYPE3", "IGTI11", "ITSA4", "ITUB4", "JBSS3", "KLBN11", "LREN3", "LWSA3", "MGLU3", "MRFG3", "MRVE3", "MULT3", "NTCO3", "PETR3", "PETR4", "RECV3", "PRIO3", "PETZ3", "RADL3", "RAIZ4", "RENT3", "RAIL3", "RDOR3", "SANB11", "SBSP3", "SMTO3", "SUZB3", "TAEE11", "TIMS3", "TOTS3", "TRPL4", "UGPA3", "USIM5", "VALE3", "VBBR3", "VIVT3", "WEGE3", "YDUQ3", "POMO4", "MOVI3", "STBP3", "PSSA11", "TEND3", "JHSF3", "GRND3", "ODPV3", "SLCE3", "MDIA3", "BRSR6", "TRIS3", "LEVE3", "UNIP6", "VULC3", "SIMH3", "KEPL3", "MYPK3", "CAML3", "RANI3", "AMER3", "AERI3", "ZAMP3", "LJQQ3", "AESB3", "MEAL3", "SOJA3", "ROMI3", "RAPT4", "ESPA3", "MILS3", "VIVA3", "PORT3", "GMAT3", "CURY3", "LAVV3", "DIRR3", "ORVR3", "OPCT3", "IFCM3", "CLSA3", "VITT3", "MATD3", "FIQE3", "TFCO4", "INTB3", "AMBP3", "CBAV3", "CXSE3", "GGPS3", "TTEN3", "AGXY3", "BRBI11", "MLAS3", "NUBR33", "PINE4", "RNI3", "RSID3", "SHOW3", "TECN3", "UCAS3",
+    "BOVA11", "IVVB11", "SMAL11", "HASH11", "XINA11", "NASD11", "EURP11", "USTK11", "QBTC11", "ETHE11", "GOLD11", "SPXI11", "DIVO11", "BOVV11",
+    "AAPL34", "AMZO34", "GOGL34", "MSFT34", "TSLA34", "NVDC34", "META34", "NFLX34", "DISB34", "BABA34", "NIKE34", "PYPL34", "JPMB34", "VIVB34", "COCA34", "PEP34", "MCDC34", "ABTT34", "ADBE34", "AMD34", "AXPB34", "BAHI34", "BERK34", "BKNG34", "CATP34", "COST34", "CRMZ34", "CSCO34", "CVSH34", "EBAY34", "GEPA34", "GILD34", "GSGI34", "HDLU34", "HONB34", "IBMJ34", "INTC34", "ISFE34", "ITUB34", "JNJB34", "LILL34", "LINB34", "LOWC34", "MAEL34", "MMM_34", "MOOO34", "MRCK34", "MSCD34", "ORCL34", "PFIZ34", "PGCO34", "PMAM34", "QCOM34", "SBUX34", "TGTB34", "TMOS34", "TXSA34", "UNHH34", "UPSS34", "USB_34", "VZIO34", "WDPZ34", "WFCO34", "WMTB34", "XOMX34"
+]
 
-# ==========================================
-# FUNÇÃO PARA PEGAR TODOS OS ATIVOS DA B3
-# ==========================================
-@st.cache_data(ttl=86400) # Atualiza a lista 1x por dia
-def carregar_todos_ativos():
-    # Esta é uma forma robusta de buscar ativos brasileiros via Yahoo Finance
-    # Inclui ações, FIIs e BDRs
+def analisar_total(ticker):
     try:
-        # Lista baseada nos índices amplos da B3
-        # Para ser 100% completo, poderíamos baixar uma lista da B3 e subir no Space
-        # Mas aqui usaremos uma lista expandida via busca dinâmica ou estática robusta
-        df_ibov = pd.read_html('https://en.wikipedia.org/wiki/IBrX-100')[0]
-        tickers = df_ibov['Ticker'].tolist()
-        # Adicionando manualmente setores comuns e BDRs populares para garantir
-        extras = ["PETR4", "VALE3", "ITUB4", "BBDC4", "MGLU3", "IVVB11", "BOVA11", "AAPL34", "NVDC34"]
-        return list(set(tickers + extras))
-    except:
-        # Fallback caso o scraper falhe
-        return ["PETR4", "VALE3", "ITUB4", "BBDC4", "BBAS3", "ABEV3", "MGLU3"]
-
-# ==========================================
-# ENGINE DE SCANNER ROBUSTO
-# ==========================================
-def scan_engine(ticker):
-    try:
-        simbolo = f"{ticker}.SA" if ".SA" not in ticker else ticker
-        df = yf.download(simbolo, period="100d", interval="1d", progress=False)
-        
+        simbolo = f"{ticker}.SA" if not ticker.endswith(".SA") else ticker
+        df = yf.download(simbolo, period="150d", progress=False)
         if df.empty or len(df) < 70: return None
         if isinstance(df.columns, pd.MultiIndex): df.columns = df.columns.get_level_values(0)
-
-        cl = df['Close']
-        # Filtro 1: Média Móvel 69 (Tendência)
-        m69 = cl.ewm(span=69, adjust=False).mean()
         
-        # Filtro 2: Estocástico Rápido
-        l14, h14 = df['Low'].rolling(14).min(), df['High'].rolling(14).max()
+        cl, hi, lo = df['Close'], df['High'], df['Low']
+        m69 = cl.ewm(span=69, adjust=False).mean()
+        l14, h14 = lo.rolling(14).min(), hi.rolling(14).max()
         stk = 100 * ((cl - l14) / (h14 - l14)).rolling(3).mean()
         
-        # Filtro 3: DMI+ e DMI-
-        up, dw = df['High'].diff(), -df['Low'].diff()
-        tr = pd.concat([df['High']-df['Low'], abs(df['High']-cl.shift()), abs(df['Low']-cl.shift())], axis=1).max(axis=1)
+        up, dw = hi.diff(), -lo.diff()
+        tr = pd.concat([hi-lo, abs(hi-cl.shift()), abs(lo-cl.shift())], axis=1).max(axis=1)
         atr_s = tr.rolling(14).sum().values
-        pi = 100 * (pd.Series(np.where((up>dw)&(up>0), up, 0)).rolling(14).sum().values / atr_s)
-        mi = 100 * (pd.Series(np.where((dw>up)&(dw>0), dw, 0)).rolling(14).sum().values / atr_s)
-
-        # Lógica de Compra VIP
-        last_cl = float(cl.iloc[-1])
-        if last_cl > m69.iloc[-1] and pi[-1] > mi[-1] and stk.iloc[-1] < 80:
-            if last_cl > float(df['High'].iloc[-2]): # Rompimento
-                # Gerenciamento de Risco
-                sl, sg = (0.05, 0.08) # Stop 5%, Alvo 8% (Ajustável)
-                return {
-                    "ATIVO": ticker,
-                    "PREÇO": round(last_cl, 2),
-                    "STOP LOSS": round(last_cl * (1-sl), 2),
-                    "ALVO GAIN": round(last_cl * (1+sg), 2),
-                    "FORÇA": round(pi[-1], 1)
-                }
+        p_mov = pd.Series(np.where((up>dw)&(up>0), up, 0)).rolling(14).sum().values
+        m_mov = pd.Series(np.where((dw>up)&(dw>0), dw, 0)).rolling(14).sum().values
+        pi = 100 * (p_mov / atr_s)
+        mi = 100 * (m_mov / atr_s)
+        
+        v1, v2, v3, v4 = cl.iloc[-1] > m69.iloc[-1], pi[-1] > mi[-1], stk.iloc[-1] < 80, cl.iloc[-1] > hi.iloc[-2]
+        
+        if v1 and v2 and v3 and v4:
+            if ticker.endswith('34'): sl, sg = 0.04, 0.06
+            elif ticker.endswith('11'): sl, sg = 0.03, 0.045
+            else: sl, sg = 0.05, 0.075
+            p = float(cl.iloc[-1])
+            return {"ATIVO": ticker, "PREÇO": round(p, 2), "LOSS": round(p*(1-sl), 2), "GAIN": round(p*(1+sg), 2)}
     except: return None
     return None
 
-# ==========================================
-# INTERFACE
-# ==========================================
-st.title("🛡️ B3 VIP GOLD SCANNER")
-st.write("Varredura em tempo real de todo o mercado brasileiro.")
+st.title("🛡️ SCANNER B3 VIP GOLD")
 
-ativos = carregar_todos_ativos()
-st.info(f"Monitorando {len(ativos)} ativos principais da B3.")
+if "resultados" not in st.session_state: st.session_state.resultados = []
 
-if st.button("🚀 INICIAR VARREDURA COMPLETA", use_container_width=True):
-    progresso = st.progress(0)
-    status_text = st.empty()
+if st.button("BUSCAR OPORTUNIDADES AGORA", use_container_width=True):
     deteccoes = []
+    progresso = st.progress(0)
+    for i, t in enumerate(LISTA_TOTAL_B3):
+        res = analisar_total(t)
+        if res: deteccoes.append(res)
+        progresso.progress((i + 1) / len(LISTA_TOTAL_B3))
+    st.session_state.resultados = deteccoes
+    progresso.empty()
 
-    # Uso de 20 threads para alta velocidade
-    with ThreadPoolExecutor(max_workers=20) as executor:
-        for i, res in enumerate(executor.map(scan_engine, ativos)):
-            if res:
-                deteccoes.append(res)
-            progresso.progress((i + 1) / len(ativos))
-            status_text.text(f"Analisando: {ativos[i]}")
-            
-    st.session_state.resultados_vip = deteccoes
-    status_text.success(f"Varredura Finalizada! {len(deteccoes)} oportunidades encontradas.")
-
-# Exibição
-if "resultados_vip" in st.session_state and st.session_state.resultados_vip:
-    df_final = pd.DataFrame(st.session_state.resultados_vip)
-    st.dataframe(df_final, use_container_width=True, hide_index=True)
-    
-    # Gráfico de Apoio
+if st.session_state.resultados:
+    st.subheader("🎯 Tabela de Sinais")
+    df_res = pd.DataFrame(st.session_state.resultados)
+    st.dataframe(df_res, use_container_width=True, hide_index=True)
     st.divider()
-    selecao = st.selectbox("Análise Visual do Ativo:", df_final["ATIVO"].tolist())
-    # ... (lógica do gráfico igual à anterior, mas com Candlesticks)
+    ativo_sel = st.selectbox("Veja os alvos no gráfico:", [r['ATIVO'] for r in st.session_state.resultados])
+    if ativo_sel:
+        dados_ativo = next(item for item in st.session_state.resultados if item["ATIVO"] == ativo_sel)
+        val_loss, val_gain, val_preco = dados_ativo["LOSS"], dados_ativo["GAIN"], dados_ativo["PREÇO"]
+        simbolo = f"{ativo_sel}.SA" if not ativo_sel.endswith(".SA") else ativo_sel
+        df_plot = yf.download(simbolo, period="60d", progress=False)
+        if isinstance(df_plot.columns, pd.MultiIndex): df_plot.columns = df_plot.columns.get_level_values(0)
+        
+        fig = go.Figure()
+        fig.add_trace(go.Scatter(x=df_plot.index, y=df_plot['Close'], name="Preço", line=dict(color="#00FF00")))
+        fig.add_hline(y=val_gain, line_dash="dash", line_color="cyan", annotation_text=f"GAIN: {val_gain}")
+        fig.add_hline(y=val_loss, line_dash="dash", line_color="red", annotation_text=f"LOSS: {val_loss}")
+        fig.add_trace(go.Scatter(x=[df_plot.index[-1]], y=[val_preco], mode='markers', name='ENTRADA', marker=dict(symbol='triangle-up', size=18, color='#39FF14', line=dict(width=2, color='white'))))
+        
+        min_y = min(df_plot['Close'].min(), val_loss) * 0.98
+        max_y = max(df_plot['Close'].max(), val_gain) * 1.02
+        fig.update_layout(template="plotly_dark", yaxis=dict(range=[min_y, max_y], side="right"), margin=dict(l=5, r=5, t=40, b=5), height=450, showlegend=False)
+        st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
