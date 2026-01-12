@@ -7,10 +7,7 @@ import plotly.graph_objects as go
 # =========================
 # CONFIGURAÇÃO GERAL
 # =========================
-st.set_page_config(
-    page_title="Scanner B3 VIP GOLD",
-    layout="wide"
-)
+st.set_page_config(page_title="Scanner B3 VIP GOLD", layout="wide")
 
 # =========================
 # BLINDAGEM VISUAL
@@ -43,66 +40,115 @@ if not st.session_state.auth:
     st.stop()
 
 # =========================
-# TEXTO EXPLICATIVO (INICIANTE)
+# TEXTO PARA INICIANTES
 # =========================
 st.markdown("""
 ### 🛡️ Scanner B3 VIP GOLD
 
-Os ativos listados abaixo **passaram por um filtro técnico proprietário**, 
-baseado na **confluência de múltiplos indicadores de tendência e momentum**.
+Os ativos exibidos abaixo **passaram por um filtro técnico proprietário**,  
+baseado em **tendência, força e momento**, conforme o método VIP GOLD.
 
-👉 O objetivo é **mapear ativos alinhados com tendência de alta**,  
-👉 já com **níveis objetivos de risco (stop)** e **alvo (gain)**.
-
-> ⚠️ Este scanner **não executa ordens**.  
-> Ele apenas **organiza oportunidades** dentro do método VIP GOLD.
+📌 Apenas ativos **alinhados no diário e confirmados no semanal** são exibidos.  
+📌 Cada ativo já vem com **stop e alvo objetivos**, conforme o tipo.
 """)
 
 # =========================
-# LISTA DE ATIVOS (INICIAL)
+# LISTA INICIAL DE ATIVOS
 # =========================
 ATIVOS = [
-    "PETR4", "VALE3", "ITUB4", "BBAS3", "WEGE3",
-    "BOVA11", "IVVB11", "AAPL34", "MSFT34"
+    "ABEV3","BBAS3","BBDC4","ITUB4","PETR4","VALE3","WEGE3","SUZB3",
+    "BOVA11","IVVB11",
+    "AAPL34","MSFT34","GOGL34"
 ]
 
 # =========================
-# FUNÇÃO DE ANÁLISE (OCULTA)
+# FUNÇÕES AUXILIARES
 # =========================
-def analisar(ativo):
+def calcular_dmi(df, n=14):
+    high, low, close = df["High"], df["Low"], df["Close"]
+    up = high.diff()
+    down = -low.diff()
+    tr = pd.concat([
+        high - low,
+        (high - close.shift()).abs(),
+        (low - close.shift()).abs()
+    ], axis=1).max(axis=1)
+
+    atr = tr.rolling(n).sum()
+    plus_dm = np.where((up > down) & (up > 0), up, 0)
+    minus_dm = np.where((down > up) & (down > 0), down, 0)
+
+    plus_di = 100 * pd.Series(plus_dm).rolling(n).sum() / atr
+    minus_di = 100 * pd.Series(minus_dm).rolling(n).sum() / atr
+
+    return plus_di, minus_di
+
+# =========================
+# FUNÇÃO PRINCIPAL
+# =========================
+def analisar_ativo(ativo):
     try:
         ticker = f"{ativo}.SA"
-        df = yf.download(ticker, period="160d", progress=False)
-        if df.empty or len(df) < 80:
+
+        df_d = yf.download(ticker, period="220d", interval="1d", progress=False)
+        df_w = yf.download(ticker, period="2y", interval="1wk", progress=False)
+
+        if df_d.empty or df_w.empty:
             return None
 
-        close = df["Close"]
-        ema69 = close.ewm(span=69).mean()
+        close_d = df_d["Close"]
+        close_w = df_w["Close"]
 
-        # FILTRO PRINCIPAL (SEM EXPOR SETUP)
-        condicao = close.iloc[-1] > ema69.iloc[-1]
+        ema69_d = close_d.ewm(span=69).mean()
+        ema69_w = close_w.ewm(span=69).mean()
 
-        if condicao:
-            preco = round(close.iloc[-1], 2)
+        # 🔒 CONFIRMAÇÃO SEMANAL (ELIMINATÓRIA)
+        if close_w.iloc[-1] <= ema69_w.iloc[-1]:
+            return None
 
-            if ativo.endswith("34"):
-                sl, sg = 0.04, 0.06
-            elif ativo.endswith("11"):
-                sl, sg = 0.03, 0.045
-            else:
-                sl, sg = 0.05, 0.075
+        # 🔒 TENDÊNCIA DIÁRIA
+        if close_d.iloc[-1] <= ema69_d.iloc[-1]:
+            return None
 
-            return {
-                "Ativo": ativo,
-                "Preço Atual": preco,
-                "Stop (%)": f"{int(sl*100)}%",
-                "Alvo (%)": f"{int(sg*100)}%",
-                "Stop (R$)": round(preco * (1 - sl), 2),
-                "Alvo (R$)": round(preco * (1 + sg), 2)
-            }
+        # 🔒 DMI
+        di_plus, di_minus = calcular_dmi(df_d)
+        if di_plus.iloc[-1] <= di_minus.iloc[-1]:
+            return None
+
+        # 🔒 ESTOCÁSTICO (14,3,3)
+        low14 = df_d["Low"].rolling(14).min()
+        high14 = df_d["High"].rolling(14).max()
+        stoch = 100 * (close_d - low14) / (high14 - low14)
+        stoch_k = stoch.rolling(3).mean()
+
+        if stoch_k.iloc[-1] > 80:
+            return None
+
+        preco = round(close_d.iloc[-1], 2)
+
+        # 🔒 STOPS FIXOS (MANUAL)
+        if ativo.endswith("34"):
+            sl, sg = 0.04, 0.06
+            tipo = "BDR"
+        elif ativo.endswith("11"):
+            sl, sg = 0.03, 0.045
+            tipo = "ETF"
+        else:
+            sl, sg = 0.05, 0.075
+            tipo = "AÇÃO"
+
+        return {
+            "Ativo": ativo,
+            "Tipo": tipo,
+            "Preço": preco,
+            "Stop (%)": f"{int(sl*100)}%",
+            "Alvo (%)": f"{round(sg*100,1)}%",
+            "Stop (R$)": round(preco * (1 - sl), 2),
+            "Alvo (R$)": round(preco * (1 + sg), 2)
+        }
+
     except:
-        pass
-    return None
+        return None
 
 # =========================
 # EXECUÇÃO
@@ -114,7 +160,7 @@ if st.button("🔍 Buscar oportunidades do dia", use_container_width=True):
     progresso = st.progress(0)
 
     for i, ativo in enumerate(ATIVOS):
-        r = analisar(ativo)
+        r = analisar_ativo(ativo)
         if r:
             resultados.append(r)
         progresso.progress((i + 1) / len(ATIVOS))
@@ -123,9 +169,8 @@ if st.button("🔍 Buscar oportunidades do dia", use_container_width=True):
 
     if resultados:
         df = pd.DataFrame(resultados)
-        st.subheader("🎯 Ativos aprovados pelo filtro VIP GOLD")
+        st.subheader("🎯 Ativos aprovados pelo método VIP GOLD")
         st.dataframe(df, use_container_width=True, hide_index=True)
     else:
-        st.info("Nenhum ativo passou pelo filtro hoje.")
-
+        st.info("Nenhum ativo atendeu a todos os critérios hoje.")
 
