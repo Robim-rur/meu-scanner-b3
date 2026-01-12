@@ -45,5 +45,53 @@ def analisar_total(ticker):
         stk = 100 * ((cl - l14) / (h14 - l14)).rolling(3).mean()
         up, dw = hi.diff(), -lo.diff()
         tr = pd.concat([hi-lo, abs(hi-cl.shift()), abs(lo-cl.shift())], axis=1).max(axis=1)
-        atr_s = tr.rolling(14).sum()
-        pi = 100 *
+        atr_s = tr.rolling(14).sum().values
+        p_mov = pd.Series(np.where((up>dw)&(up>0), up, 0)).rolling(14).sum().values
+        m_mov = pd.Series(np.where((dw>up)&(dw>0), dw, 0)).rolling(14).sum().values
+        pi = 100 * (p_mov / atr_s)
+        mi = 100 * (m_mov / atr_s)
+        v1, v2, v3, v4 = cl.iloc[-1] > m69.iloc[-1], pi[-1] > mi[-1], stk.iloc[-1] < 80, cl.iloc[-1] > hi.iloc[-2]
+        if v1 and v2 and v3 and v4:
+            if ticker.endswith('34'): sl, sg = 0.04, 0.06
+            elif ticker.endswith('11'): sl, sg = 0.03, 0.045
+            else: sl, sg = 0.05, 0.075
+            p = float(cl.iloc[-1])
+            return {"ATIVO": ticker, "PREÇO": round(p, 2), "LOSS": round(p*(1-sl), 2), "GAIN": round(p*(1+sg), 2)}
+    except: return None
+    return None
+
+st.title("🛡️ SCANNER B3 VIP GOLD")
+
+if "resultados" not in st.session_state: st.session_state.resultados = []
+
+if st.button("BUSCAR OPORTUNIDADES AGORA", use_container_width=True):
+    deteccoes = []
+    progresso = st.progress(0)
+    for i, t in enumerate(LISTA_TOTAL_B3):
+        res = analisar_total(t)
+        if res: deteccoes.append(res)
+        progresso.progress((i + 1) / len(LISTA_TOTAL_B3))
+    st.session_state.resultados = deteccoes
+    progresso.empty()
+
+if st.session_state.resultados:
+    st.subheader("🎯 Tabela de Sinais")
+    df_res = pd.DataFrame(st.session_state.resultados)
+    st.dataframe(df_res, use_container_width=True, hide_index=True)
+    st.divider()
+    ativo_sel = st.selectbox("Veja os alvos no gráfico:", [r['ATIVO'] for r in st.session_state.resultados])
+    if ativo_sel:
+        dados_ativo = next(item for item in st.session_state.resultados if item["ATIVO"] == ativo_sel)
+        val_loss, val_gain, val_preco = dados_ativo["LOSS"], dados_ativo["GAIN"], dados_ativo["PREÇO"]
+        simbolo = f"{ativo_sel}.SA" if not ativo_sel.endswith(".SA") else ativo_sel
+        df_plot = yf.download(simbolo, period="60d", progress=False)
+        if isinstance(df_plot.columns, pd.MultiIndex): df_plot.columns = df_plot.columns.get_level_values(0)
+        fig = go.Figure()
+        fig.add_trace(go.Scatter(x=df_plot.index, y=df_plot['Close'], name="Preço", line=dict(color="#00FF00")))
+        fig.add_hline(y=val_gain, line_dash="dash", line_color="cyan", annotation_text=f"GAIN: {val_gain}")
+        fig.add_hline(y=val_loss, line_dash="dash", line_color="red", annotation_text=f"LOSS: {val_loss}")
+        fig.add_trace(go.Scatter(x=[df_plot.index[-1]], y=[val_preco], mode='markers', name='ENTRADA', marker=dict(symbol='triangle-up', size=18, color='#39FF14', line=dict(width=2, color='white'))))
+        min_y = min(df_plot['Close'].min(), val_loss) * 0.98
+        max_y = max(df_plot['Close'].max(), val_gain) * 1.02
+        fig.update_layout(template="plotly_dark", yaxis=dict(range=[min_y, max_y], side="right"), margin=dict(l=5, r=5, t=40, b=5), height=450, showlegend=False)
+        st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
