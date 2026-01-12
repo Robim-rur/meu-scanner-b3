@@ -4,7 +4,7 @@ import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
 
-# Configuração da Página
+# 1. Configuração para Celular (Layout Largo)
 st.set_page_config(page_title="SISTEMA B3 VIP GOLD", layout="wide")
 
 # =========================
@@ -14,8 +14,8 @@ if "auth" not in st.session_state:
     st.session_state.auth = False
 
 if not st.session_state.auth:
-    st.markdown("<h2 style='text-align: center;'>🔐 ACESSO RESTRITO - B3 GOLD</h2>", unsafe_allow_html=True)
-    col_l1, col_l2, col_l3 = st.columns([1,1,1])
+    st.markdown("<h2 style='text-align: center;'>🔐 ACESSO RESTRITO</h2>", unsafe_allow_html=True)
+    col_l1, col_l2, col_l3 = st.columns([1,2,1])
     with col_l2:
         senha = st.text_input("Digite a Senha Mestra:", type="password")
         if st.button("DESBLOQUEAR SISTEMA", use_container_width=True):
@@ -64,7 +64,7 @@ def analisar_total(ticker):
     except: return None
     return None
 
-# --- UI PRINCIPAL ---
+# --- UI ---
 st.title("🛡️ SCANNER B3 VIP GOLD")
 
 if "resultados" not in st.session_state: st.session_state.resultados = []
@@ -72,32 +72,47 @@ if "resultados" not in st.session_state: st.session_state.resultados = []
 if st.button("BUSCAR OPORTUNIDADES AGORA", use_container_width=True):
     deteccoes = []
     progresso = st.progress(0)
+    total_ativos = len(LISTA_TOTAL_B3)
     for i, t in enumerate(LISTA_TOTAL_B3):
         res = analisar_total(t)
         if res: deteccoes.append(res)
-        progresso.progress((i + 1) / len(LISTA_TOTAL_B3))
+        progresso.progress((i + 1) / total_ativos)
     st.session_state.resultados = deteccoes
     progresso.empty()
 
 if st.session_state.resultados:
-    st.subheader("🎯 Tabela de Sinais e Gestão")
-    st.table(pd.DataFrame(st.session_state.resultados))
+    st.subheader("🎯 Tabela de Sinais")
+    
+    # 2. TABELA COM SCROLL PARA CELULAR
+    df_res = pd.DataFrame(st.session_state.resultados)
+    st.dataframe(df_res, use_container_width=True, hide_index=True)
     
     st.divider()
-    ativo_sel = st.selectbox("Selecione para ver o gráfico com o sinal de hoje:", [r['ATIVO'] for r in st.session_state.resultados])
+    
+    # 3. MENU DE SELEÇÃO AJUSTADO
+    ativo_sel = st.selectbox("Veja o gráfico do ativo:", [r['ATIVO'] for r in st.session_state.resultados])
     
     if ativo_sel:
         simbolo = f"{ativo_sel}.SA" if not ativo_sel.endswith(".SA") else ativo_sel
-        df_plot = yf.download(simbolo, period="100d", progress=False)
+        df_plot = yf.download(simbolo, period="90d", progress=False)
         if isinstance(df_plot.columns, pd.MultiIndex): df_plot.columns = df_plot.columns.get_level_values(0)
         
         fig = go.Figure()
-        fig.add_trace(go.Scatter(x=df_plot.index, y=df_plot['Close'], name="Preço", line=dict(color="#00FF00")))
+        fig.add_trace(go.Scatter(x=df_plot.index, y=df_plot['Close'], name="Preço", line=dict(color="#00FF00", width=2)))
         m69_plot = df_plot['Close'].ewm(span=69, adjust=False).mean()
-        fig.add_trace(go.Scatter(x=df_plot.index, y=m69_plot, name="EMA 69", line=dict(color="orange", dash="dot")))
+        fig.add_trace(go.Scatter(x=df_plot.index, y=m69_plot, name="Média 69", line=dict(color="orange", dash="dot")))
         
+        # SINAL DO DIA (TRIÂNGULO)
         fig.add_trace(go.Scatter(x=[df_plot.index[-1]], y=[df_plot['Close'].iloc[-1]], mode='markers', 
-                                 name='SINAL HOJE', marker=dict(symbol='triangle-up', size=20, color='#39FF14', line=dict(width=2, color='white'))))
+                                 name='COMPRA', marker=dict(symbol='triangle-up', size=22, color='#39FF14', line=dict(width=2, color='white'))))
         
-        fig.update_layout(template="plotly_dark", title=f"Confirmação: {ativo_sel}", hovermode="x unified")
-        st.plotly_chart(fig, use_container_width=True)
+        # 4. GRÁFICO OTIMIZADO PARA TELA DE CELULAR
+        fig.update_layout(
+            template="plotly_dark",
+            margin=dict(l=5, r=5, t=40, b=5),
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+            xaxis=dict(showgrid=False),
+            yaxis=dict(side="right"), # Preço na direita como no Profit/TradingView
+            height=400
+        )
+        st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
