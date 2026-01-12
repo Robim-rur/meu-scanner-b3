@@ -1,183 +1,95 @@
 import streamlit as st
 import yfinance as yf
 import pandas as pd
-import numpy as np
+import pandas_ta as ta
 
-# =========================
-# CONFIGURAÇÃO GERAL
-# =========================
-st.set_page_config(page_title="Scanner B3 VIP GOLD", layout="wide")
+st.set_page_config(page_title="Scanner VIP GOLD", layout="wide")
 
-# =========================
-# BLINDAGEM VISUAL
-# =========================
-st.markdown("""
-<style>
-#MainMenu {visibility: hidden;}
-footer {visibility: hidden;}
-header {visibility: hidden;}
-</style>
-""", unsafe_allow_html=True)
+# ======================
+# 🔐 SISTEMA DE LOGIN
+# ======================
+SENHA_CORRETA = "mestre10"
 
-# =========================
-# LOGIN
-# =========================
-if "auth" not in st.session_state:
-    st.session_state.auth = False
+if "autenticado" not in st.session_state:
+    st.session_state.autenticado = False
 
-if not st.session_state.auth:
-    st.markdown("<h2 style='text-align: center;'>🔐 ACESSO RESTRITO</h2>", unsafe_allow_html=True)
-    col1, col2, col3 = st.columns([1,2,1])
-    with col2:
-        senha = st.text_input("Digite sua senha de acesso", type="password")
-        if st.button("ENTRAR", use_container_width=True):
-            if senha == "mestre10":
-                st.session_state.auth = True
-                st.rerun()
-            else:
-                st.error("Senha incorreta")
+if not st.session_state.autenticado:
+    st.title("🔐 Acesso Restrito")
+    senha = st.text_input("Digite sua senha:", type="password")
+    if st.button("Entrar"):
+        if senha == SENHA_CORRETA:
+            st.session_state.autenticado = True
+            st.rerun()
+        else:
+            st.error("Senha incorreta")
     st.stop()
 
-# =========================
-# TEXTO DIDÁTICO
-# =========================
-st.markdown("""
-### 🛡️ Scanner B3 VIP GOLD
-
-Os ativos abaixo passaram por um **filtro técnico proprietário**,  
-alinhado ao método VIP GOLD, respeitando:
-
-- Tendência de alta
-- Confirmação no semanal
-- Força direcional
-- Momento adequado
-
-Cada ativo já vem com **stop e alvo objetivos**.
-""")
-
-# =========================
-# LISTA INICIAL (CONTROLADA)
-# =========================
+# ======================
+# 📊 LISTA DE ATIVOS
+# ======================
 ATIVOS = [
-    "ABEV3","BBAS3","BBDC4","ITUB4","PETR4","VALE3","WEGE3","SUZB3",
-    "BOVA11","IVVB11",
-    "AAPL34","MSFT34","GOGL34"
+    "PETR4.SA", "VALE3.SA", "ITUB4.SA", "BBAS3.SA", "BBDC4.SA",
+    "WEGE3.SA", "ABEV3.SA", "BOVA11.SA"
 ]
 
-# =========================
-# FUNÇÕES
-# =========================
-def calcular_dmi(df, n=14):
-    high, low, close = df["High"], df["Low"], df["Close"]
-    up = high.diff()
-    down = -low.diff()
-    tr = pd.concat([
-        high - low,
-        (high - close.shift()).abs(),
-        (low - close.shift()).abs()
-    ], axis=1).max(axis=1)
+# ======================
+# 🔎 FUNÇÃO DE ANÁLISE
+# ======================
+def analisar_ativo(ticker):
+    df_d = yf.download(ticker, period="6mo", interval="1d")
+    df_w = yf.download(ticker, period="2y", interval="1wk")
 
-    atr = tr.rolling(n).sum()
-    plus_dm = np.where((up > down) & (up > 0), up, 0)
-    minus_dm = np.where((down > up) & (down > 0), down, 0)
-
-    plus_di = 100 * pd.Series(plus_dm).rolling(n).sum() / atr
-    minus_di = 100 * pd.Series(minus_dm).rolling(n).sum() / atr
-
-    return plus_di, minus_di
-
-def criar_semanal(df_diario):
-    semanal = df_diario.resample("W").agg({
-        "Open": "first",
-        "High": "max",
-        "Low": "min",
-        "Close": "last",
-        "Volume": "sum"
-    }).dropna()
-    return semanal
-
-# =========================
-# ANÁLISE PRINCIPAL
-# =========================
-def analisar_ativo(ativo):
-    try:
-        ticker = f"{ativo}.SA"
-        df = yf.download(ticker, period="300d", progress=False)
-        if df.empty or len(df) < 120:
-            return None
-
-        df_w = criar_semanal(df)
-
-        close_d = df["Close"]
-        close_w = df_w["Close"]
-
-        ema69_d = close_d.ewm(span=69).mean()
-        ema69_w = close_w.ewm(span=69).mean()
-
-        # CONFIRMAÇÃO SEMANAL
-        if close_w.iloc[-1] <= ema69_w.iloc[-1]:
-            return None
-
-        # TENDÊNCIA DIÁRIA
-        if close_d.iloc[-1] <= ema69_d.iloc[-1]:
-            return None
-
-        # DMI
-        di_plus, di_minus = calcular_dmi(df)
-        if di_plus.iloc[-1] <= di_minus.iloc[-1]:
-            return None
-
-        # ESTOCÁSTICO (NÃO EXTREMO)
-        low14 = df["Low"].rolling(14).min()
-        high14 = df["High"].rolling(14).max()
-        stoch_k = 100 * (close_d - low14) / (high14 - low14)
-        stoch_k = stoch_k.rolling(3).mean()
-
-        if stoch_k.iloc[-1] > 90:
-            return None
-
-        preco = round(close_d.iloc[-1], 2)
-
-        if ativo.endswith("34"):
-            sl, sg, tipo = 0.04, 0.06, "BDR"
-        elif ativo.endswith("11"):
-            sl, sg, tipo = 0.03, 0.045, "ETF"
-        else:
-            sl, sg, tipo = 0.05, 0.075, "AÇÃO"
-
-        return {
-            "Ativo": ativo,
-            "Tipo": tipo,
-            "Preço": preco,
-            "Stop (%)": f"{int(sl*100)}%",
-            "Alvo (%)": f"{round(sg*100,1)}%",
-            "Stop (R$)": round(preco * (1 - sl), 2),
-            "Alvo (R$)": round(preco * (1 + sg), 2)
-        }
-
-    except:
+    if df_d.empty or df_w.empty:
         return None
 
-# =========================
-# EXECUÇÃO
-# =========================
-st.divider()
+    # ===== SEMANAL =====
+    df_w["EMA69"] = ta.ema(df_w["Close"], length=69)
+    dmi_w = ta.dmi(df_w["High"], df_w["Low"], df_w["Close"])
+    stoch_w = ta.stoch(df_w["High"], df_w["Low"], df_w["Close"])
 
-if st.button("🔍 Buscar oportunidades do dia", use_container_width=True):
+    if df_w["Close"].iloc[-1] <= df_w["EMA69"].iloc[-1]:
+        return None
+    if dmi_w["DMP_14"].iloc[-1] <= dmi_w["DMN_14"].iloc[-1]:
+        return None
+    if stoch_w["STOCHk_14_3_3"].iloc[-1] < stoch_w["STOCHk_14_3_3"].iloc[-2]:
+        return None
+
+    # ===== DIÁRIO =====
+    df_d["EMA69"] = ta.ema(df_d["Close"], length=69)
+    dmi_d = ta.dmi(df_d["High"], df_d["Low"], df_d["Close"])
+    stoch_d = ta.stoch(df_d["High"], df_d["Low"], df_d["Close"])
+
+    if df_d["Close"].iloc[-1] <= df_d["EMA69"].iloc[-1]:
+        return None
+    if dmi_d["DMP_14"].iloc[-1] <= dmi_d["DMN_14"].iloc[-1]:
+        return None
+    if stoch_d["STOCHk_14_3_3"].iloc[-1] >= 80:
+        return None
+    if df_d["Close"].iloc[-1] <= df_d["High"].iloc[-2]:
+        return None
+
+    preco = df_d["Close"].iloc[-1]
+
+    # Stops padrão (ações)
+    stop = preco * 0.95
+    gain = preco * 1.075
+
+    return {
+        "Ativo": ticker.replace(".SA", ""),
+        "Preço": round(preco, 2),
+        "Stop": round(stop, 2),
+        "Gain": round(gain, 2)
+    }
+
+# ======================
+# 🖥️ INTERFACE
+# ======================
+st.title("📈 Scanner VIP GOLD")
+st.write("Ativos que **deram entrada hoje** segundo o setup proprietário")
+
+if st.button("Rodar Scanner"):
     resultados = []
-    progresso = st.progress(0)
 
-    for i, ativo in enumerate(ATIVOS):
-        r = analisar_ativo(ativo)
-        if r:
-            resultados.append(r)
-        progresso.progress((i + 1) / len(ATIVOS))
+    with st.spinner("Analisando mercado..."):
+        for
 
-    progresso.empty()
-
-    if resultados:
-        df = pd.DataFrame(resultados)
-        st.subheader("🎯 Ativos aprovados pelo método VIP GOLD")
-        st.dataframe(df, use_container_width=True, hide_index=True)
-    else:
-        st.info("Nenhum ativo atendeu a todos os critérios hoje.")
