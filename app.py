@@ -38,7 +38,7 @@ if not st.session_state.auth:
             st.error("Senha do sistema não configurada.")
             st.stop()
 
-        SENHA_MESTRA = os.environ["MASTER_PASSWORD"]
+       SENHA_MESTRA = "mestre10"
 
         senha = st.text_input("Digite a senha de acesso:", type="password")
         if st.button("ENTRAR NO SISTEMA", use_container_width=True):
