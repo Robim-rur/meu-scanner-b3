@@ -5,9 +5,30 @@ import numpy as np
 import plotly.graph_objects as go
 
 # Configuração da Página
-st.set_page_config(page_title="SCANNER B3 VIP GOLD", layout="wide")
+st.set_page_config(page_title="SISTEMA B3 VIP GOLD", layout="wide")
 
+# =========================
+# SISTEMA DE LOGIN
+# =========================
+if "auth" not in st.session_state:
+    st.session_state.auth = False
+
+if not st.session_state.auth:
+    st.markdown("<h2 style='text-align: center;'>🔐 ACESSO RESTRITO - B3 GOLD</h2>", unsafe_allow_html=True)
+    col_l1, col_l2, col_l3 = st.columns([1,1,1])
+    with col_l2:
+        senha = st.text_input("Digite a Senha Mestra:", type="password")
+        if st.button("DESBLOQUEAR SISTEMA", use_container_width=True):
+            if senha == "mestre10":
+                st.session_state.auth = True
+                st.rerun()
+            else:
+                st.error("Senha Incorreta!")
+    st.stop()
+
+# =========================
 # LISTA DE ATIVOS (+200)
+# =========================
 LISTA_TOTAL_B3 = [
     "RRRP3", "ALOS3", "ALPA4", "ABEV3", "ARZZ3", "ASAI3", "AZUL4", "B3SA3", "BBAS3", "BBDC3", "BBDC4", "BBSE3", "BEEF3", "BPAC11", "BRAP4", "BRFS3", "BRKM5", "CCRO3", "CIEL3", "CMIG4", "CMIN3", "COGN3", "CPFE3", "CPLE6", "CSAN3", "CSNA3", "CVCB3", "CYRE3", "DXCO3", "ELET3", "ELET6", "EMBR3", "ENGI11", "ENEV3", "EGIE3", "EQTL3", "EZTC3", "FLRY3", "GGBR4", "GOAU4", "GOLL4", "HAPV3", "HYPE3", "IGTI11", "ITSA4", "ITUB4", "JBSS3", "KLBN11", "LREN3", "LWSA3", "MGLU3", "MRFG3", "MRVE3", "MULT3", "NTCO3", "PETR3", "PETR4", "RECV3", "PRIO3", "PETZ3", "RADL3", "RAIZ4", "RENT3", "RAIL3", "RDOR3", "SANB11", "SBSP3", "SMTO3", "SUZB3", "TAEE11", "TIMS3", "TOTS3", "TRPL4", "UGPA3", "USIM5", "VALE3", "VBBR3", "VIVT3", "WEGE3", "YDUQ3", "POMO4", "MOVI3", "STBP3", "PSSA11", "TEND3", "JHSF3", "GRND3", "ODPV3", "SLCE3", "MDIA3", "BRSR6", "TRIS3", "LEVE3", "UNIP6", "VULC3", "SIMH3", "KEPL3", "MYPK3", "CAML3", "RANI3", "AMER3", "AERI3", "ZAMP3", "LJQQ3", "AESB3", "MEAL3", "SOJA3", "ROMI3", "RAPT4", "ESPA3", "MILS3", "VIVA3", "PORT3", "GMAT3", "CURY3", "LAVV3", "DIRR3", "ORVR3", "OPCT3", "IFCM3", "CLSA3", "VITT3", "MATD3", "FIQE3", "TFCO4", "INTB3", "AMBP3", "CBAV3", "CXSE3", "GGPS3", "TTEN3", "AGXY3", "BRBI11", "MLAS3", "NUBR33", "PINE4", "RNI3", "RSID3", "SHOW3", "TECN3", "UCAS3",
     "BOVA11", "IVVB11", "SMAL11", "HASH11", "XINA11", "NASD11", "EURP11", "USTK11", "QBTC11", "ETHE11", "GOLD11", "SPXI11", "DIVO11", "BOVV11",
@@ -31,54 +52,52 @@ def analisar_total(ticker):
         pi = 100 * (pd.Series(np.where((up>dw)&(up>0), up, 0)).rolling(14).sum().values / atr_s.values)
         mi = 100 * (pd.Series(np.where((dw>up)&(dw>0), dw, 0)).rolling(14).sum().values / atr_s.values)
 
-        # Regras GOLD
         v1, v2, v3, v4 = cl.iloc[-1] > m69.iloc[-1], pi[-1] > mi[-1], stk.iloc[-1] < 80, cl.iloc[-1] > hi.iloc[-2]
         
         if v1 and v2 and v3 and v4:
-            return {"ATIVO": ticker, "PREÇO": round(float(cl.iloc[-1]), 2), "DATA": df.index[-1]}
+            if ticker.endswith('34'): sl, sg = 0.04, 0.06
+            elif ticker.endswith('11'): sl, sg = 0.03, 0.045
+            else: sl, sg = 0.05, 0.075
+            
+            p = float(cl.iloc[-1])
+            return {"ATIVO": ticker, "PREÇO": round(p, 2), "STOP LOSS": round(p*(1-sl), 2), "STOP GAIN": round(p*(1+sg), 2)}
     except: return None
     return None
 
-# --- UI ---
-st.title("🛡️ SCANNER B3 VIP GOLD - SINAL DO DIA")
+# --- UI PRINCIPAL ---
+st.title("🛡️ SCANNER B3 VIP GOLD")
 
 if "resultados" not in st.session_state: st.session_state.resultados = []
 
 if st.button("BUSCAR OPORTUNIDADES AGORA", use_container_width=True):
     deteccoes = []
     progresso = st.progress(0)
-    total = len(LISTA_TOTAL_B3)
     for i, t in enumerate(LISTA_TOTAL_B3):
         res = analisar_total(t)
         if res: deteccoes.append(res)
-        progresso.progress((i + 1) / total)
+        progresso.progress((i + 1) / len(LISTA_TOTAL_B3))
     st.session_state.resultados = deteccoes
     progresso.empty()
 
 if st.session_state.resultados:
-    df_res = pd.DataFrame(st.session_state.resultados)
-    st.table(df_res[["ATIVO", "PREÇO"]])
+    st.subheader("🎯 Tabela de Sinais e Gestão")
+    st.table(pd.DataFrame(st.session_state.resultados))
     
-    ativo_sel = st.selectbox("Selecione para ver o gráfico:", [r['ATIVO'] for r in st.session_state.resultados])
+    st.divider()
+    ativo_sel = st.selectbox("Selecione para ver o gráfico com o sinal de hoje:", [r['ATIVO'] for r in st.session_state.resultados])
     
     if ativo_sel:
-        # Busca dados completos para o gráfico do ativo selecionado
         simbolo = f"{ativo_sel}.SA" if not ativo_sel.endswith(".SA") else ativo_sel
         df_plot = yf.download(simbolo, period="100d", progress=False)
         if isinstance(df_plot.columns, pd.MultiIndex): df_plot.columns = df_plot.columns.get_level_values(0)
         
         fig = go.Figure()
-        # Preço e Média
         fig.add_trace(go.Scatter(x=df_plot.index, y=df_plot['Close'], name="Preço", line=dict(color="#00FF00")))
         m69_plot = df_plot['Close'].ewm(span=69, adjust=False).mean()
         fig.add_trace(go.Scatter(x=df_plot.index, y=m69_plot, name="EMA 69", line=dict(color="orange", dash="dot")))
         
-        # Sinal apenas do DIA
-        sinal_data = [df_plot.index[-1]]
-        sinal_preco = [df_plot['Close'].iloc[-1]]
+        fig.add_trace(go.Scatter(x=[df_plot.index[-1]], y=[df_plot['Close'].iloc[-1]], mode='markers', 
+                                 name='SINAL HOJE', marker=dict(symbol='triangle-up', size=20, color='#39FF14', line=dict(width=2, color='white'))))
         
-        fig.add_trace(go.Scatter(x=sinal_data, y=sinal_preco, mode='markers', name='SINAL DE HOJE',
-                                 marker=dict(symbol='triangle-up', size=18, color='#39FF14', line=dict(width=2, color='white'))))
-        
-        fig.update_layout(template="plotly_dark", title=f"Confirmação de Entrada: {ativo_sel}", hovermode="x unified")
+        fig.update_layout(template="plotly_dark", title=f"Confirmação: {ativo_sel}", hovermode="x unified")
         st.plotly_chart(fig, use_container_width=True)
