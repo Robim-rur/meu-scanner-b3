@@ -2,7 +2,6 @@ import streamlit as st
 import yfinance as yf
 import pandas as pd
 import numpy as np
-import plotly.graph_objects as go
 
 # =========================
 # CONFIGURAÇÃO GERAL
@@ -40,20 +39,24 @@ if not st.session_state.auth:
     st.stop()
 
 # =========================
-# TEXTO PARA INICIANTES
+# TEXTO DIDÁTICO
 # =========================
 st.markdown("""
 ### 🛡️ Scanner B3 VIP GOLD
 
-Os ativos exibidos abaixo **passaram por um filtro técnico proprietário**,  
-baseado em **tendência, força e momento**, conforme o método VIP GOLD.
+Os ativos abaixo passaram por um **filtro técnico proprietário**,  
+alinhado ao método VIP GOLD, respeitando:
 
-📌 Apenas ativos **alinhados no diário e confirmados no semanal** são exibidos.  
-📌 Cada ativo já vem com **stop e alvo objetivos**, conforme o tipo.
+- Tendência de alta
+- Confirmação no semanal
+- Força direcional
+- Momento adequado
+
+Cada ativo já vem com **stop e alvo objetivos**.
 """)
 
 # =========================
-# LISTA INICIAL DE ATIVOS
+# LISTA INICIAL (CONTROLADA)
 # =========================
 ATIVOS = [
     "ABEV3","BBAS3","BBDC4","ITUB4","PETR4","VALE3","WEGE3","SUZB3",
@@ -62,7 +65,7 @@ ATIVOS = [
 ]
 
 # =========================
-# FUNÇÕES AUXILIARES
+# FUNÇÕES
 # =========================
 def calcular_dmi(df, n=14):
     high, low, close = df["High"], df["Low"], df["Close"]
@@ -83,59 +86,64 @@ def calcular_dmi(df, n=14):
 
     return plus_di, minus_di
 
+def criar_semanal(df_diario):
+    semanal = df_diario.resample("W").agg({
+        "Open": "first",
+        "High": "max",
+        "Low": "min",
+        "Close": "last",
+        "Volume": "sum"
+    }).dropna()
+    return semanal
+
 # =========================
-# FUNÇÃO PRINCIPAL
+# ANÁLISE PRINCIPAL
 # =========================
 def analisar_ativo(ativo):
     try:
         ticker = f"{ativo}.SA"
-
-        df_d = yf.download(ticker, period="220d", interval="1d", progress=False)
-        df_w = yf.download(ticker, period="2y", interval="1wk", progress=False)
-
-        if df_d.empty or df_w.empty:
+        df = yf.download(ticker, period="300d", progress=False)
+        if df.empty or len(df) < 120:
             return None
 
-        close_d = df_d["Close"]
+        df_w = criar_semanal(df)
+
+        close_d = df["Close"]
         close_w = df_w["Close"]
 
         ema69_d = close_d.ewm(span=69).mean()
         ema69_w = close_w.ewm(span=69).mean()
 
-        # 🔒 CONFIRMAÇÃO SEMANAL (ELIMINATÓRIA)
+        # CONFIRMAÇÃO SEMANAL
         if close_w.iloc[-1] <= ema69_w.iloc[-1]:
             return None
 
-        # 🔒 TENDÊNCIA DIÁRIA
+        # TENDÊNCIA DIÁRIA
         if close_d.iloc[-1] <= ema69_d.iloc[-1]:
             return None
 
-        # 🔒 DMI
-        di_plus, di_minus = calcular_dmi(df_d)
+        # DMI
+        di_plus, di_minus = calcular_dmi(df)
         if di_plus.iloc[-1] <= di_minus.iloc[-1]:
             return None
 
-        # 🔒 ESTOCÁSTICO (14,3,3)
-        low14 = df_d["Low"].rolling(14).min()
-        high14 = df_d["High"].rolling(14).max()
-        stoch = 100 * (close_d - low14) / (high14 - low14)
-        stoch_k = stoch.rolling(3).mean()
+        # ESTOCÁSTICO (NÃO EXTREMO)
+        low14 = df["Low"].rolling(14).min()
+        high14 = df["High"].rolling(14).max()
+        stoch_k = 100 * (close_d - low14) / (high14 - low14)
+        stoch_k = stoch_k.rolling(3).mean()
 
-        if stoch_k.iloc[-1] > 80:
+        if stoch_k.iloc[-1] > 90:
             return None
 
         preco = round(close_d.iloc[-1], 2)
 
-        # 🔒 STOPS FIXOS (MANUAL)
         if ativo.endswith("34"):
-            sl, sg = 0.04, 0.06
-            tipo = "BDR"
+            sl, sg, tipo = 0.04, 0.06, "BDR"
         elif ativo.endswith("11"):
-            sl, sg = 0.03, 0.045
-            tipo = "ETF"
+            sl, sg, tipo = 0.03, 0.045, "ETF"
         else:
-            sl, sg = 0.05, 0.075
-            tipo = "AÇÃO"
+            sl, sg, tipo = 0.05, 0.075, "AÇÃO"
 
         return {
             "Ativo": ativo,
@@ -173,4 +181,3 @@ if st.button("🔍 Buscar oportunidades do dia", use_container_width=True):
         st.dataframe(df, use_container_width=True, hide_index=True)
     else:
         st.info("Nenhum ativo atendeu a todos os critérios hoje.")
-
