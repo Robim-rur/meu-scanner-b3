@@ -1,95 +1,117 @@
 import streamlit as st
 import yfinance as yf
 import pandas as pd
-import pandas_ta as ta
+import numpy as np
 
-st.set_page_config(page_title="Scanner VIP GOLD", layout="wide")
+st.set_page_config(page_title="B3 VIP GOLD", layout="wide")
 
 # ======================
-# 🔐 SISTEMA DE LOGIN
+# LOGIN
 # ======================
-SENHA_CORRETA = "mestre10"
+SENHA = "mestre10"
 
-if "autenticado" not in st.session_state:
-    st.session_state.autenticado = False
+if "auth" not in st.session_state:
+    st.session_state.auth = False
 
-if not st.session_state.autenticado:
+if not st.session_state.auth:
     st.title("🔐 Acesso Restrito")
-    senha = st.text_input("Digite sua senha:", type="password")
+    senha = st.text_input("Senha de acesso", type="password")
     if st.button("Entrar"):
-        if senha == SENHA_CORRETA:
-            st.session_state.autenticado = True
+        if senha == SENHA:
+            st.session_state.auth = True
             st.rerun()
         else:
             st.error("Senha incorreta")
     st.stop()
 
 # ======================
-# 📊 LISTA DE ATIVOS
+# CONFIGURAÇÃO
 # ======================
-ATIVOS = [
-    "PETR4.SA", "VALE3.SA", "ITUB4.SA", "BBAS3.SA", "BBDC4.SA",
-    "WEGE3.SA", "ABEV3.SA", "BOVA11.SA"
+st.title("📊 Scanner B3 VIP GOLD")
+
+st.info(
+    "Os ativos listados abaixo **passaram pelo filtro do Setup VIP GOLD**.\n\n"
+    "O setup utiliza **múltiplos indicadores técnicos combinados**, "
+    "com análise de **tendência no semanal** e **entrada no diário**.\n\n"
+    "⚠️ O método não mostra todos os ativos — apenas os **tecnicamente autorizados**."
+)
+
+# Lista inicial (depois ampliamos)
+ativos = [
+    "PETR4.SA", "VALE3.SA", "ITUB4.SA", "BBAS3.SA",
+    "ABEV3.SA", "BBDC4.SA", "WEGE3.SA", "BOVA11.SA"
 ]
 
+resultados = []
+
 # ======================
-# 🔎 FUNÇÃO DE ANÁLISE
+# LOOP PRINCIPAL
 # ======================
-def analisar_ativo(ticker):
-    df_d = yf.download(ticker, period="6mo", interval="1d")
-    df_w = yf.download(ticker, period="2y", interval="1wk")
+for ativo in ativos:
+    df_d = yf.download(ativo, period="1y", interval="1d", progress=False)
+    df_w = yf.download(ativo, period="2y", interval="1wk", progress=False)
 
     if df_d.empty or df_w.empty:
-        return None
+        continue
 
-    # ===== SEMANAL =====
-    df_w["EMA69"] = ta.ema(df_w["Close"], length=69)
-    dmi_w = ta.dmi(df_w["High"], df_w["Low"], df_w["Close"])
-    stoch_w = ta.stoch(df_w["High"], df_w["Low"], df_w["Close"])
+    close_d = df_d["Close"]
+    close_w = df_w["Close"]
 
-    if df_w["Close"].iloc[-1] <= df_w["EMA69"].iloc[-1]:
-        return None
-    if dmi_w["DMP_14"].iloc[-1] <= dmi_w["DMN_14"].iloc[-1]:
-        return None
-    if stoch_w["STOCHk_14_3_3"].iloc[-1] < stoch_w["STOCHk_14_3_3"].iloc[-2]:
-        return None
+    # Média 69
+    ema69_d = close_d.ewm(span=69).mean()
+    ema69_w = close_w.ewm(span=69).mean()
 
-    # ===== DIÁRIO =====
-    df_d["EMA69"] = ta.ema(df_d["Close"], length=69)
-    dmi_d = ta.dmi(df_d["High"], df_d["Low"], df_d["Close"])
-    stoch_d = ta.stoch(df_d["High"], df_d["Low"], df_d["Close"])
+    # Estocástico Diário
+    low14 = df_d["Low"].rolling(14).min()
+    high14 = df_d["High"].rolling(14).max()
+    stoch_d = 100 * (close_d - low14) / (high14 - low14)
 
-    if df_d["Close"].iloc[-1] <= df_d["EMA69"].iloc[-1]:
-        return None
-    if dmi_d["DMP_14"].iloc[-1] <= dmi_d["DMN_14"].iloc[-1]:
-        return None
-    if stoch_d["STOCHk_14_3_3"].iloc[-1] >= 80:
-        return None
-    if df_d["Close"].iloc[-1] <= df_d["High"].iloc[-2]:
-        return None
+    # DMI Diário (simplificado)
+    up = df_d["High"].diff()
+    down = -df_d["Low"].diff()
 
-    preco = df_d["Close"].iloc[-1]
+    plus_dm = np.where((up > down) & (up > 0), up, 0.0)
+    minus_dm = np.where((down > up) & (down > 0), down, 0.0)
 
-    # Stops padrão (ações)
-    stop = preco * 0.95
-    gain = preco * 1.075
+    tr = pd.concat([
+        df_d["High"] - df_d["Low"],
+        abs(df_d["High"] - close_d.shift()),
+        abs(df_d["Low"] - close_d.shift())
+    ], axis=1).max(axis=1)
 
-    return {
-        "Ativo": ticker.replace(".SA", ""),
-        "Preço": round(preco, 2),
-        "Stop": round(stop, 2),
-        "Gain": round(gain, 2)
-    }
+    atr = tr.rolling(14).sum()
+    di_plus = 100 * pd.Series(plus_dm).rolling(14).sum() / atr
+    di_minus = 100 * pd.Series(minus_dm).rolling(14).sum() / atr
+
+    # ======================
+    # REGRAS
+    # ======================
+
+    # SEMANAL AUTORIZA
+    semanal_ok = close_w.iloc[-1] > ema69_w.iloc[-1]
+
+    # DIÁRIO ENTRA
+    diario_ok = (
+        close_d.iloc[-1] > ema69_d.iloc[-1] and
+        di_plus.iloc[-1] > di_minus.iloc[-1] and
+        stoch_d.iloc[-1] < 80 and
+        close_d.iloc[-1] > df_d["High"].iloc[-2]
+    )
+
+    if semanal_ok and diario_ok:
+        resultados.append({
+            "Ativo": ativo.replace(".SA", ""),
+            "Fechamento": round(close_d.iloc[-1], 2)
+        })
 
 # ======================
-# 🖥️ INTERFACE
+# RESULTADO
 # ======================
-st.title("📈 Scanner VIP GOLD")
-st.write("Ativos que **deram entrada hoje** segundo o setup proprietário")
+if resultados:
+    df_resultado = pd.DataFrame(resultados)
+    st.success(f"{len(df_resultado)} ativos aprovados pelo Setup VIP GOLD")
+    st.dataframe(df_resultado, use_container_width=True)
+else:
+    st.warning("Nenhum ativo passou pelo filtro hoje. Mercado sem autorização técnica.")
 
-if st.button("Rodar Scanner"):
-    resultados = []
-
-    with st.spinner("Analisando mercado..."):
-        for
 
