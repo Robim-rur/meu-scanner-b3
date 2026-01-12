@@ -14,7 +14,7 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# Oculta menus e rodapé (proteção visual)
+# Esconde menus do Streamlit (proteção visual)
 st.markdown("""
 <style>
 #MainMenu {visibility: hidden;}
@@ -34,11 +34,11 @@ if not st.session_state.auth:
 
     col1, col2, col3 = st.columns([1,2,1])
     with col2:
-        try:
-            SENHA_MESTRA = os.environ["MASTER_PASSWORD"]
-        except KeyError:
+        if "MASTER_PASSWORD" not in os.environ:
             st.error("Senha do sistema não configurada.")
             st.stop()
+
+        SENHA_MESTRA = os.environ["MASTER_PASSWORD"]
 
         senha = st.text_input("Digite a senha de acesso:", type="password")
         if st.button("ENTRAR NO SISTEMA", use_container_width=True):
@@ -65,8 +65,8 @@ Os ativos exibidos abaixo passaram por um filtro técnico proprietário,
 baseado na convergência de múltiplos indicadores de tendência e momentum,
 com foco exclusivo em operações compradas (swing trade).
 
-Este scanner tem como objetivo reduzir ruído operacional e apresentar
-somente ativos tecnicamente alinhados à tendência principal.
+Este scanner apresenta apenas ativos alinhados à tendência principal,
+reduzindo ruído e erro operacional.
 """)
 
 # =========================
@@ -170,7 +170,7 @@ if st.button("🔍 BUSCAR ATIVOS APROVADOS", use_container_width=True):
     barra.empty()
 
 # =========================
-# RESULTADOS
+# RESULTADOS E GRÁFICO
 # =========================
 if st.session_state.resultados:
     st.subheader("🎯 Ativos Aprovados pelo Filtro")
@@ -180,12 +180,11 @@ if st.session_state.resultados:
 
     st.divider()
 
-    ativo_sel = st.selectbox(
-        "Visualizar gráfico do ativo:",
-        df["ATIVO"].tolist()
-    )
+    ativo_sel = st.selectbox("Visualizar gráfico do ativo:", df["ATIVO"].tolist())
 
-    dados = df[df["ATIVO"] == ativo_sel].iloc[0]
+    linha = df.loc[df["ATIVO"] == ativo_sel].iloc[0]
+    stop_val = float(linha["STOP"])
+    gain_val = float(linha["GAIN"])
 
     df_plot = yf.download(f"{ativo_sel}.SA", period="60d", progress=False)
     if isinstance(df_plot.columns, pd.MultiIndex):
@@ -199,19 +198,8 @@ if st.session_state.resultados:
         line=dict(color="#00ff99")
     ))
 
-    fig.add_hline(
-        y=dados["GAIN"],
-        line_dash="dash",
-        line_color="cyan",
-        annotation_text="GAIN"
-    )
-
-    fig.add_hline(
-        y=dados["STOP"],
-        line_dash="dash",
-        line_color="red",
-        annotation_text="STOP"
-    )
+    fig.add_hline(y=gain_val, line_dash="dash", line_color="cyan", annotation_text="GAIN")
+    fig.add_hline(y=stop_val, line_dash="dash", line_color="red", annotation_text="STOP")
 
     fig.update_layout(
         template="plotly_dark",
