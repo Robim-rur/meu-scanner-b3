@@ -31,7 +31,7 @@ def definir_alvos(ticker):
         return 0.05, 0.075, "AÇÃO"
 
 # =============================================================================
-# 3. MOTOR DE VARREDURA PRIVADO (LINHAS 61-95)
+# 3. MOTOR DE VARREDURA PRIVADO (LINHAS 61-90)
 # =============================================================================
 def processar_rastreio(ticker):
     """Executa a lógica de filtragem sem expor os critérios na tela"""
@@ -39,7 +39,7 @@ def processar_rastreio(ticker):
         dados = yf.download(ticker, period="2y", interval="1d", progress=False)
         if len(dados) < 200: return None
         
-        # Análise de Médio Prazo (Oculta)
+        # Análise Semanal (Oculta)
         df_w = dados.resample('W').last()
         df_w = obter_indicadores_internos(df_w)
         df_w['SMA200'] = ta.sma(df_w['Close'], length=200)
@@ -49,7 +49,7 @@ def processar_rastreio(ticker):
         
         if not autoriza_semanal: return None
 
-        # Análise de Curto Prazo (Oculta)
+        # Análise Diária (Oculta)
         df_d = obter_indicadores_internos(dados)
         autoriza_diario = (df_d['STOCHk_14_3_3'].iloc[-1] > df_d['STOCHd_14_3_3'].iloc[-1]) and \
                           (df_d['ADX_14'].iloc[-1] > 15)
@@ -61,12 +61,62 @@ def processar_rastreio(ticker):
         return None
 
 # =============================================================================
-# 4. EXIBIÇÃO PARA O CLIENTE (LINHAS 96-115)
+# 4. EXIBIÇÃO PARA O CLIENTE (LINHAS 91-115)
 # =============================================================================
 def main():
     st.title("🎯 Oportunidades Identificadas - B3")
     st.write("Ativos que atingiram os critérios de entrada para operação hoje.")
 
-    # Lista formatada para evitar erros de sintaxe
+    # Lista organizada verticalmente para evitar erros de sintaxe (SyntaxError)
     lista_ativos = [
-        "PETR4.SA", "VALE3.SA", "ITUB4.SA", "BBD
+        "PETR4.SA", 
+        "VALE3.SA", 
+        "ITUB4.SA", 
+        "BBDC4.SA", 
+        "ABEV3.SA", 
+        "BBAS3.SA", 
+        "AAPL34.SA", 
+        "GOGL34.SA", 
+        "AMZO34.SA", 
+        "MSFT34.SA", 
+        "BOVA11.SA", 
+        "IVVB11.SA",
+        "WEGE3.SA", 
+        "RENT3.SA", 
+        "SUZB3.SA", 
+        "MGLU3.SA", 
+        "B3SA3.SA", 
+        "LREN3.SA"
+    ]
+    
+    hits = []
+    progresso = st.progress(0)
+    
+    for i, t in enumerate(lista_ativos):
+        preco_entrada = processar_rastreio(t)
+        if preco_entrada is not None:
+            loss_p, gain_p, classe = definir_alvos(t)
+            hits.append({
+                "ATIVO": t.replace(".SA", ""),
+                "TIPO": classe,
+                "ENTRADA (R$)": round(float(preco_entrada), 2),
+                "STOP LOSS (R$)": round(float(preco_entrada * (1 - loss_p)), 2),
+                "LOSS (%)": f"{loss_p*100:.0f}%",
+                "STOP GAIN (R$)": round(float(preco_entrada * (1 + gain_p)), 2),
+                "GAIN (%)": f"{gain_p*100:.1f}%"
+            })
+        progresso.progress((i + 1) / len(lista_ativos))
+
+    if hits:
+        st.table(pd.DataFrame(hits))
+    else:
+        st.info("Nenhuma nova entrada identificada para os ativos monitorados nesta sessão.")
+
+# =============================================================================
+# 5. INICIALIZAÇÃO (LINHAS 116-132)
+# =============================================================================
+if __name__ == "__main__":
+    try:
+        main()
+    except Exception as e:
+        st.error("Sistema em atualização. Por favor, aguarde alguns instantes.")
