@@ -60,15 +60,11 @@ def analisar_ativo(ticker):
         return None
 
 # =============================================================================
-# 4. LISTA DOS 200 ATIVOS E EXECUÇÃO (VARREDURA REAL)
+# 4. LISTA DOS 200 ATIVOS (FORMATADA PARA EVITAR ERROS)
 # =============================================================================
 def main():
     st.title("🎯 Scanner de Oportunidades Profissional")
     
-    # LISTA EXPANDIDA COM 200 ATIVOS (AÇÕES, BDRS, ETFS)
+    # LISTA DIVIDIDA PARA EVITAR QUEBRA DE LINHA NO CÓDIGO
     ativos = [
-        "PETR4.SA", "VALE3.SA", "ITUB4.SA", "BBDC4.SA", "ABEV3.SA", "BBAS3.SA", "JBSS3.SA", "ELET3.SA", "WEGE3.SA", "RENT3.SA",
-        "ITSA4.SA", "HAPV3.SA", "GGBR4.SA", "SUZB3.SA", "B3SA3.SA", "MGLU3.SA", "LREN3.SA", "EQTL3.SA", "CSAN3.SA", "RDOR3.SA",
-        "RAIL3.SA", "PRIO3.SA", "VIBR3.SA", "UGPA3.SA", "SBSP3.SA", "ASAI3.SA", "CCRO3.SA", "RADL3.SA", "CMIG4.SA", "CPLE6.SA",
-        "TOTS3.SA", "CPFE3.SA", "ENEV3.SA", "EMBR3.SA", "BRFS3.SA", "CRFB3.SA", "MULT3.SA", "CSNA3.SA", "GOAU4.SA", "USIM5.SA",
-        "AAPL34.SA", "AMZO34.SA", "GOGL34.SA", "MSFT34.SA", "TSLA34.SA", "META34.SA", "NFLX34.SA", "NVDC34.SA", "MELI
+        "PETR4.
