@@ -67,7 +67,6 @@ def main():
     st.title("🎯 Oportunidades Identificadas - B3")
     st.write("Ativos que atingiram os critérios de entrada para operação hoje.")
 
-    # Lista ampliada para garantir que o cliente veja resultados
+    # Lista formatada para evitar erros de sintaxe
     lista_ativos = [
-        "PETR4.SA", "VALE3.SA", "ITUB4.SA", "BBDC4.SA", "ABEV3.SA", "BBAS3.SA", 
-        "
+        "PETR4.SA", "VALE3.SA", "ITUB4.SA", "BBD
