@@ -23,12 +23,12 @@ if not st.session_state.auth:
     st.stop()
 
 # 3. INTERFACE
-st.title("Scanner B3 VIP GOLD")
+st.title("Scanner B3 VIP GOLD - Alta Performance")
 
-# LISTA MESTRA EXPANDIDA (260 ATIVOS)
+# LISTA MESTRA (260 ATIVOS)
+@st.cache_data
 def get_lista_vip():
-    return sorted(list(set([
-        # --- AÇÕES ---
+    lista = [
         "RRRP3.SA", "ALOS3.SA", "ALPA4.SA", "ABEV3.SA", "ARZZ3.SA", "ASAI3.SA", "AZUL4.SA", "B3SA3.SA", 
         "BBAS3.SA", "BBDC3.SA", "BBDC4.SA", "BBSE3.SA", "BEEF3.SA", "BPAC11.SA", "BRAP4.SA", "BRFS3.SA", 
         "BRKM5.SA", "CCRO3.SA", "CIEL3.SA", "CMIG4.SA", "CMIN3.SA", "COGN3.SA", "CPFE3.SA", "CPLE6.SA", 
@@ -42,44 +42,40 @@ def get_lista_vip():
         "SLCE3.SA", "MOVI3.SA", "STBP3.SA", "SOMA3.SA", "PSSA3.SA", "RAPT4.SA", "RECV3.SA", "SIMH3.SA",
         "VULC3.SA", "AURE3.SA", "DIRR3.SA", "JHSF3.SA", "KEPL3.SA", "LEVE3.SA", "MDIA3.SA", "MYPK3.SA",
         "AMER3.SA", "GRND3.SA", "QUAL3.SA", "SMFT3.SA", "TASA4.SA", "TRIS3.SA", "WIZC3.SA", "ZAMP3.SA",
-        "GOLL4.SA", "AMBP3.SA", "ORVR3.SA", "VIVA3.SA", "LJQQ3.SA", "AESB3.SA", "CURY3.SA", "PORT3.SA",
-        "LOGN3.SA", "FRAS3.SA", "RANI3.SA", "CAML3.SA", "ROMI3.SA", "SOJA3.SA", "TGMA3.SA", "PARD3.SA",
-        # --- ETFs ---
         "BOVA11.SA", "IVVB11.SA", "SMAL11.SA", "HASH11.SA", "QBTC11.SA", "GOLD11.SA", "XINA11.SA",
         "DIVO11.SA", "MATB11.SA", "IFRA11.SA", "TEKB11.SA", "BOVS11.SA", "SPXI11.SA", "EURP11.SA",
-        "NASD11.SA", "BBSD11.SA", "ECOO11.SA", "FIND11.SA", "GOVE11.SA", "REIT11.SA", "LFTS11.SA",
-        # --- BDRs ---
-        "AAPL34.SA", "AMZO34.SA", "GOGL34.SA", "MSFT34.SA", "TSLA34.SA", "META34.SA", "NVDC34.SA",
-        "DISB34.SA", "NFLX34.SA", "BABA34.SA", "NIKE34.SA", "PYPL34.SA", "JPMC34.SA", "COCA34.SA",
-        "PEP34.SA", "MCDC34.SA", "BERK34.SA", "JNJB34.SA", "PFIZ34.SA", "WALM34.SA", "XOMP34.SA",
-        "ADBE34.SA", "AVGO34.SA", "QCOM34.SA", "TXSA34.SA", "AMDZ34.SA", "ASML34.SA", "COST34.SA",
-        "MELI34.SA", "SBUB34.SA", "UBER34.SA", "SPOT34.SA", "VISA34.SA", "CRMZ34.SA", "NKEB34.SA",
-        "MSTR34.SA", "AIRB34.SA", "ORCL34.SA", "CSCO34.SA", "IBM34.SA", "INTC34.SA", "TGTB34.SA"
-    ])))
+        "NASD11.SA", "BBSD11.SA", "ECOO11.SA", "FIND11.SA", "GOVE11.SA", "AAPL34.SA", "AMZO34.SA", 
+        "GOGL34.SA", "MSFT34.SA", "TSLA34.SA", "META34.SA", "NVDC34.SA", "DISB34.SA", "NFLX34.SA", 
+        "BABA34.SA", "NIKE34.SA", "PYPL34.SA", "JPMC34.SA", "COCA34.SA", "PEP34.SA", "MCDC34.SA", 
+        "BERK34.SA", "JNJB34.SA", "PFIZ34.SA", "WALM34.SA", "XOMP34.SA", "ADBE34.SA", "AVGO34.SA", 
+        "QCOM34.SA", "TXSA34.SA", "AMDZ34.SA", "ASML34.SA", "COST34.SA"
+    ]
+    return sorted(list(set(lista)))
 
 ativos = get_lista_vip()
 
-if st.button(f"🚀 INICIAR SCANNER TOTAL ({len(ativos)} ATIVOS)", use_container_width=True):
+if st.button(f"🚀 INICIAR VARREDURA ({len(ativos)} ATIVOS)", use_container_width=True):
     resultados = []
-    lista_graficos = []
     progresso = st.progress(0)
-    msg = st.empty()
+    status_msg = st.empty()
     
     for i, ativo in enumerate(ativos):
         try:
-            msg.text(f"Varrendo: {ativo} ({i+1}/{len(ativos)})")
+            status_msg.text(f"Analisando: {ativo} ({i+1}/{len(ativos)})")
+            
+            # Download reduzido para estabilidade
             df_d = yf.download(ativo, period="100d", interval="1d", progress=False)
             df_w = yf.download(ativo, period="2y", interval="1wk", progress=False)
 
-            if len(df_d) < 70: continue
+            if len(df_d) < 70 or df_d['Close'].isnull().all(): continue
             if isinstance(df_d.columns, pd.MultiIndex): df_d.columns = df_d.columns.get_level_values(0)
             if isinstance(df_w.columns, pd.MultiIndex): df_w.columns = df_w.columns.get_level_values(0)
 
-            # Cálculos
+            # Indicadores
             close = df_d["Close"]
             ema69_d = close.ewm(span=69, adjust=False).mean()
             ema69_w = df_w["Close"].ewm(span=69, adjust=False).mean()
-            
+
             l14, h14 = df_d["Low"].rolling(14).min(), df_d["High"].rolling(14).max()
             stoch = 100 * (close - l14) / (h14 - l14)
 
@@ -92,7 +88,7 @@ if st.button(f"🚀 INICIAR SCANNER TOTAL ({len(ativos)} ATIVOS)", use_container
             v_p = float(close.iloc[-1])
             max_o = float(df_d["High"].iloc[-2])
 
-            # Filtros VIP GOLD
+            # Filtros Rigorosos VIP GOLD
             if (v_p > float(ema69_w.iloc[-1]) and v_p > float(ema69_d.iloc[-1]) and 
                 float(pi.iloc[-1]) > float(mi.iloc[-1]) and float(stoch.iloc[-1]) < 80.0 and v_p > max_o):
                 
@@ -102,28 +98,31 @@ if st.button(f"🚀 INICIAR SCANNER TOTAL ({len(ativos)} ATIVOS)", use_container
 
                 sl, sg = round(v_p*(1-pl/100),2), round(v_p*(1+pg/100),2)
 
+                # Salva dados do gráfico para gerar depois da varredura (evita travar)
                 resultados.append({
-                    "Ativo": ativo.replace(".SA",""),
-                    "Classe": cl,
-                    "Entrada (R$)": round(v_p, 2),
-                    "Stop Loss": sl,
-                    "% Loss": f"-{pl}%",
-                    "Stop Gain": sg,
-                    "% Gain": f"+{pg}%",
-                    "Máx Ontem": round(max_o, 2)
+                    "Ativo": ativo, "Classe": cl, "Entrada (R$)": round(v_p, 2),
+                    "Stop Loss": sl, "% Loss": f"-{pl}%", "Stop Gain": sg, "% Gain": f"+{pg}%",
+                    "Máx Ontem": round(max_o, 2), "df": df_d.tail(40), "ema": ema69_d.tail(40)
                 })
 
-                # Gráfico
-                fig = go.Figure(data=[go.Candlestick(x=df_d.index[-40:], open=df_d['Open'][-40:], high=df_d['High'][-40:], low=df_d['Low'][-40:], close=df_d['Close'][-40:], name="Candles")])
-                fig.add_hline(y=sg, line_color="green", line_width=2, label=dict(text=f"GAIN {pg}% (R$ {sg})", font=dict(color="green")))
-                fig.add_hline(y=sl, line_color="red", line_width=2, label=dict(text=f"LOSS {pl}% (R$ {sl})", font=dict(color="red")))
-                fig.add_hline(y=max_o, line_color="yellow", line_dash="dot", label=dict(text="Máx Anterior", font=dict(color="yellow")))
-                fig.add_trace(go.Scatter(x=df_d.index[-40:], y=ema69_d[-40:], name="Média 69", line=dict(color="orange", width=1)))
-
-                fig.update_layout(title=f"Setup VIP GOLD: {ativo}", yaxis_title="Preço (R$)", template="plotly_dark", xaxis_rangeslider_visible=False, height=500)
-                lista_graficos.append(fig)
-
-        except: continue
+        except Exception as e:
+            continue
+        
         progresso.progress((i + 1) / len(ativos))
 
-    msg.empty()
+    status_msg.empty()
+    progresso.empty()
+
+    if resultados:
+        st.success(f"🔥 {len(resultados)} Oportunidades Encontradas!")
+        
+        # Tabela sem os dados brutos do gráfico
+        df_table = pd.DataFrame(resultados).drop(columns=['df', 'ema'])
+        st.table(df_table)
+        
+        st.divider()
+        st.subheader("Gráficos Técnicos de Entrada")
+        
+        # Gera os gráficos um por um após a varredura
+        for res in resultados:
+            df_g = res['df']
