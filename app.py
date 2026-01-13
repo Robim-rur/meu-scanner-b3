@@ -9,118 +9,86 @@ st.set_page_config(page_title="B3 VIP GOLD", layout="wide")
 # ======================
 # LOGIN
 # ======================
-SENHA = "mestre10"
 if "auth" not in st.session_state:
     st.session_state.auth = False
 
 if not st.session_state.auth:
-    st.title("🔐 Acesso Restrito")
-    senha = st.text_input("Senha de acesso", type="password")
-    if st.button("Entrar", use_container_width=True):
-        if senha == SENHA:
+    st.markdown("<h2 style='text-align: center;'>🔐 ACESSO RESTRITO</h2>", unsafe_allow_html=True)
+    senha = st.text_input("Senha", type="password", placeholder="Digite sua senha...", label_visibility="collapsed")
+    if st.button("DESBLOQUEAR SISTEMA", use_container_width=True):
+        if senha == "mestre10":
             st.session_state.auth = True
             st.rerun()
-        else:
-            st.error("Senha incorreta")
     st.stop()
 
 # ======================
 # INTERFACE
 # ======================
-st.title("📊 Scanner B3 VIP GOLD - Filtro Ajustado")
-st.markdown("---")
+st.title("📈 SISTEMA B3 VIP - GOLD")
 
-# Lista de ativos
 ativos = [
     "PETR4.SA", "VALE3.SA", "ITUB4.SA", "BBAS3.SA", "BBDC4.SA", 
     "ABEV3.SA", "WEGE3.SA", "MGLU3.SA", "RENT3.SA", "PRIO3.SA",
-    "B3SA3.SA", "GOAU4.SA", "GGBR4.SA", "CSNA3.SA", "BOVA11.SA"
+    "B3SA3.SA", "GOAU4.SA", "GGBR4.SA", "CSNA3.SA", "RAIZ4.SA",
+    "BOVA11.SA", "IVVB11.SA", "SMALL11.SA", "AAPL34.SA", "AMZO34.SA"
 ]
 
-if st.button("🔍 INICIAR VARREDURA (Sem %K > %D no Semanal)", use_container_width=True):
+if st.button("EXECUTAR ANÁLISE DE MERCADO", use_container_width=True):
     resultados = []
     progresso = st.progress(0)
-    status_placeholder = st.empty()
     
     for i, ticker in enumerate(ativos):
         try:
-            status_placeholder.text(f"Analisando {ticker}...")
-            
-            # Download de dados
             df_d = yf.download(ticker, period="1y", interval="1d", progress=False)
             df_w = yf.download(ticker, period="2y", interval="1wk", progress=False)
 
-            if df_d.empty or df_w.empty: continue
-            if isinstance(df_d.columns, pd.MultiIndex): df_d.columns = df_d.columns.get_level_values(0)
-            if isinstance(df_w.columns, pd.MultiIndex): df_w.columns = df_w.columns.get_level_values(0)
+            if df_d.empty or df_w.empty:
+                continue
 
-            # --- 1. FILTRO SEMANAL (AUTORIZAÇÃO) ---
-            cl_w = df_w["Close"]
-            hi_w, lo_w = df_w["High"], df_w["Low"]
+            if isinstance(df_d.columns, pd.MultiIndex):
+                df_d.columns = df_d.columns.get_level_values(0)
+            if isinstance(df_w.columns, pd.MultiIndex):
+                df_w.columns = df_w.columns.get_level_values(0)
+
+            # --- CÁLCULOS ---
+            cl_w = df_w['Close']
             m69_w = cl_w.ewm(span=69, adjust=False).mean()
+            
+            cl_d = df_d['Close']
+            m69_d = cl_d.ewm(span=69, adjust=False).mean()
+            
+            l14, h14 = df_d['Low'].rolling(14).min(), df_d['High'].rolling(14).max()
+            stk = 100 * ((cl_d - l14) / (h14 - l14)).rolling(3).mean()
+            
+            u, d = df_d['High'].diff(), -df_d['Low'].diff()
+            tr = pd.concat([df_d['High']-df_d['Low'], abs(df_d['High']-cl_d.shift()), abs(df_d['Low']-cl_d.shift())], axis=1).max(axis=1)
+            at_sum = tr.rolling(14).sum()
+            pi = 100 * (pd.Series(np.where((u>d)&(u>0), u, 0)).rolling(14).sum().values / at_sum.values)
+            mi = 100 * (pd.Series(np.where((d>u)&(d>0), d, 0)).rolling(14).sum().values / at_sum.values)
 
-            # Estocástico Semanal (14,3,3)
-            stk_w_raw = 100 * ((cl_w - lo_w.rolling(14).min()) / (hi_w.rolling(14).max() - lo_w.rolling(14).min()))
-            k_w = stk_w_raw.rolling(3).mean() # %K do semanal
+            # --- REGRAS (REDUZIDAS) ---
+            v_w = float(cl_w.iloc[-1]) > float(m69_w.iloc[-1])
+            v1 = float(cl_d.iloc[-1]) > float(m69_d.iloc[-1])
+            v2 = float(pi[-1]) > float(mi[-1])
+            v3 = float(stk.iloc[-1]) < 80
 
-            # DMI Semanal
-            up_w, dw_w = hi_w.diff(), -lo_w.diff()
-            tr_w = pd.concat([hi_w-lo_w, abs(hi_w-cl_w.shift()), abs(lo_w-cl_w.shift())], axis=1).max(axis=1)
-            atr_w = tr_w.rolling(14).sum()
-            plus_w = 100 * (pd.Series(np.where((up_w>dw_w)&(up_w>0), up_w, 0)).rolling(14).sum().values / atr_w.values)
-            minus_w = 100 * (pd.Series(np.where((dw_w>up_w)&(dw_w>0), dw_w, 0)).rolling(14).sum().values / atr_w.values)
+            if v_w and v1 and v2 and v3:
+                resultados.append({
+                    "Ativo": ticker.replace(".SA", ""),
+                    "Preço": f"R$ {float(cl_d.iloc[-1]):.2f}",
+                    "Sinal": "COMPRA 🚀"
+                })
 
-            # REGRAS SEMANAIS (Sem a trava de %K > %D)
-            ok_semanal = (
-                float(cl_w.iloc[-1]) > float(m69_w.iloc[-1]) and     # Tendência Alta
-                float(k_w.iloc[-1]) >= float(k_w.iloc[-2]) and       # Inclinado para cima ou lateral
-                float(plus_w[-1]) > float(minus_w[-1])               # D+ > D-
-            )
-
-            if ok_semanal:
-                # --- 2. GATILHO DIÁRIO (EXECUÇÃO) ---
-                cl_d = df_d["Close"]
-                hi_d, lo_d = df_d["High"], df_d["Low"]
-                m69_d = cl_d.ewm(span=69, adjust=False).mean()
-                
-                # Estocástico Diário (14,3,3)
-                stk_d_raw = 100 * ((cl_d - lo_d.rolling(14).min()) / (hi_d.rolling(14).max() - lo_d.rolling(14).min()))
-                k_d = stk_d_raw.rolling(3).mean()
-                d_d = k_d.rolling(3).mean()
-
-                # DMI Diário
-                up_d, dw_d = hi_d.diff(), -lo_d.diff()
-                tr_d = pd.concat([hi_d-lo_d, abs(hi_d-cl_d.shift()), abs(lo_d-cl_d.shift())], axis=1).max(axis=1)
-                atr_d = tr_d.rolling(14).sum()
-                plus_d = 100 * (pd.Series(np.where((up_d>dw_d)&(up_d>0), up_d, 0)).rolling(14).sum().values / atr_d.values)
-                minus_d = 100 * (pd.Series(np.where((dw_d>up_d)&(dw_d>0), dw_d, 0)).rolling(14).sum().values / atr_d.values)
-
-                # VALIDAÇÃO DIÁRIA
-                ok_diario = (
-                    float(cl_d.iloc[-1]) > float(m69_d.iloc[-1]) and
-                    float(plus_d[-1]) > float(minus_d[-1]) and
-                    float(k_d.iloc[-1]) > float(d_d.iloc[-1]) and
-                    float(cl_d.iloc[-1]) > float(hi_d.iloc[-2])
-                )
-
-                if ok_diario:
-                    resultados.append({
-                        "Ativo": ticker.replace(".SA", ""),
-                        "Preço": f"R$ {float(cl_d.iloc[-1]):.2f}",
-                        "Filtro Semanal": "✅ AUTORIZADO",
-                        "Sinal": "COMPRA 🚀"
-                    })
-
-        except: continue
+        except:
+            continue
+        
         progresso.progress((i + 1) / len(ativos))
 
-    status_placeholder.empty()
     progresso.empty()
 
     if resultados:
-        st.success(f"Encontrados {len(resultados)} ativos!")
         st.table(pd.DataFrame(resultados))
     else:
-        st.warning("Mesmo com o ajuste, nenhum ativo passou pelos filtros hoje.")
+        st.warning("Nenhum ativo encontrado.")
 
-st.info("**Ajuste Feito:** Agora o Semanal autoriza se o Estocástico estiver subindo ou lateral, sem exigir o cruzamento de linhas.")
+st.divider()
