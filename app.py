@@ -4,7 +4,7 @@ import pandas as pd
 import numpy as np
 
 # 1. Configuração de página
-st.set_page_config(page_title="B3 VIP GOLD - Gestão de Risco", layout="wide")
+st.set_page_config(page_title="B3 VIP GOLD", layout="wide")
 
 # 2. LOGIN
 if "auth" not in st.session_state:
@@ -22,10 +22,10 @@ if not st.session_state.auth:
     st.stop()
 
 # 3. INTERFACE
-st.title("📊 Scanner B3 VIP GOLD - Setup + Stops")
+st.title("Scanner B3 VIP GOLD")
 
-# Listas categorizadas para aplicar os stops corretos
-acoes = [
+# LISTA EXPANDIDA PARA 200+ ATIVOS
+ativos_full = [
     "RRRP3.SA", "ALOS3.SA", "ALPA4.SA", "ABEV3.SA", "ARZZ3.SA", "ASAI3.SA", "AZUL4.SA", "B3SA3.SA", 
     "BBAS3.SA", "BBDC3.SA", "BBDC4.SA", "BBSE3.SA", "BEEF3.SA", "BPAC11.SA", "BRAP4.SA", "BRFS3.SA", 
     "BRKM5.SA", "CCRO3.SA", "CIEL3.SA", "CMIG4.SA", "CMIN3.SA", "COGN3.SA", "CPFE3.SA", "CPLE6.SA", 
@@ -36,32 +36,29 @@ acoes = [
     "PRIO3.SA", "PETZ3.SA", "RADL3.SA", "RAIZ4.SA", "RDOR3.SA", "RENT3.SA", "RAIL3.SA", "SBSP3.SA", 
     "SANB11.SA", "SMTO3.SA", "SUZB3.SA", "TAEE11.SA", "TIMS3.SA", "TOTS3.SA", "UGPA3.SA", "USIM5.SA", 
     "VALE3.SA", "VAMO3.SA", "VBBR3.SA", "VIVT3.SA", "WEGE3.SA", "YDUQ3.SA", "POMO4.SA", "TEND3.SA",
-    "SLCE3.SA", "MOVI3.SA", "STBP3.SA", "SOMA3.SA", "PSSA3.SA", "RAPT4.SA", "RECV3.SA", "SIMH3.SA", 
-    "VULC3.SA", "AURE3.SA", "DIRR3.SA", "JHSF3.SA", "KEPL3.SA", "LEVE3.SA", "MDIA3.SA"
-]
-
-etfs = [
+    "SLCE3.SA", "MOVI3.SA", "STBP3.SA", "SOMA3.SA", "PSSA3.SA", "RAPT4.SA", "RECV3.SA", "SIMH3.SA",
+    "VULC3.SA", "AURE3.SA", "DIRR3.SA", "JHSF3.SA", "KEPL3.SA", "LEVE3.SA", "MDIA3.SA", "MYPK3.SA",
+    "AMER3.SA", "GRND3.SA", "QUAL3.SA", "SMFT3.SA", "TASA4.SA", "TRIS3.SA", "WIZC3.SA", "ZAMP3.SA",
+    "PARD3.SA", "MEAL3.SA", "ODPV3.SA", "LOGG3.SA", "EVEN3.SA", "HBOR3.SA", "FRAS3.SA", "RANI3.SA",
     "BOVA11.SA", "IVVB11.SA", "SMAL11.SA", "HASH11.SA", "QBTC11.SA", "GOLD11.SA", "XINA11.SA",
-    "DIVO11.SA", "MATB11.SA", "IFRA11.SA", "TEKB11.SA", "BOVS11.SA", "SPXI11.SA", "EURP11.SA"
-]
-
-bdrs = [
+    "DIVO11.SA", "MATB11.SA", "IFRA11.SA", "TEKB11.SA", "BOVS11.SA", "SPXI11.SA", "EURP11.SA",
     "AAPL34.SA", "AMZO34.SA", "GOGL34.SA", "MSFT34.SA", "TSLA34.SA", "META34.SA", "NVDC34.SA",
     "DISB34.SA", "NFLX34.SA", "BABA34.SA", "NIKE34.SA", "PYPL34.SA", "JPMC34.SA", "COCA34.SA",
     "PEP34.SA", "MCDC34.SA", "SBUB34.SA", "INTC34.SA", "ORCL34.SA", "CSCO34.SA", "BERK34.SA",
-    "JNJB34.SA", "PFIZ34.SA", "WALM34.SA", "XOMP34.SA", "PGCO34.SA", "VIVR3.SA"
+    "JNJB34.SA", "PFIZ34.SA", "WALM34.SA", "XOMP34.SA", "PGCO34.SA", "UPSB34.SA", "ADBE34.SA",
+    "CRMZ34.SA", "AVGO34.SA", "QCOM34.SA", "TXSA34.SA", "AMDZ34.SA", "ASML34.SA", "TEAM34.SA"
 ]
 
-ativos = sorted(list(set(acoes + etfs + bdrs)))
+ativos = sorted(list(set(ativos_full)))
 
-if st.button(f"🔍 EXECUTAR SCANNER COMPLETO ({len(ativos)} ATIVOS)"):
+if st.button(f"🔍 INICIAR VARREDURA ({len(ativos)} ATIVOS)", use_container_width=True):
     resultados = []
     progresso = st.progress(0)
     placeholder = st.empty()
     
     for i, ativo in enumerate(ativos):
         try:
-            placeholder.text(f"Analisando {i+1}/{len(ativos)}: {ativo}")
+            placeholder.text(f"Analisando: {ativo}")
             
             df_d = yf.download(ativo, period="1y", interval="1d", progress=False)
             df_w = yf.download(ativo, period="2y", interval="1wk", progress=False)
@@ -76,38 +73,39 @@ if st.button(f"🔍 EXECUTAR SCANNER COMPLETO ({len(ativos)} ATIVOS)"):
 
             # Estocástico e DMI
             l14, h14 = df_d["Low"].rolling(14).min(), df_d["High"].rolling(14).max()
-            stoch_d = 100 * (cl_d - l14) / (h14 - l14)
-            up, dw = df_d["High"].diff(), -df_d["Low"].diff()
+            stk_d = 100 * (cl_d - l14) / (h14 - l14)
+            u, d = df_d["High"].diff(), -df_d["Low"].diff()
             tr = pd.concat([df_d["High"]-df_d["Low"], abs(df_d["High"]-cl_d.shift()), abs(df_d["Low"]-cl_d.shift())], axis=1).max(axis=1)
             atr = tr.rolling(14).sum()
-            pi = 100 * pd.Series(np.where((up>dw)&(up>0), up, 0), index=df_d.index).rolling(14).sum() / atr
-            mi = 100 * pd.Series(np.where((dw>up)&(dw>0), dw, 0), index=df_d.index).rolling(14).sum() / atr
+            pi = 100 * pd.Series(np.where((u>d)&(u>0), u, 0), index=df_d.index).rolling(14).sum() / atr
+            mi = 100 * pd.Series(np.where((d>u)&(d>0), d, 0), index=df_d.index).rolling(14).sum() / atr
 
-            # REGRAS ORIGINAIS
+            # REGRAS DO SETUP ORIGINAL (TODAS AS 4)
             v_w = float(cl_w.iloc[-1]) > float(ema69_w.iloc[-1])
             v1 = float(cl_d.iloc[-1]) > float(ema69_d.iloc[-1])
             v2 = float(pi.iloc[-1]) > float(mi.iloc[-1])
-            v3 = float(stoch_d.iloc[-1]) < 80
+            v3 = float(stk_d.iloc[-1]) < 80
             v4 = float(cl_d.iloc[-1]) > float(df_d["High"].iloc[-2])
 
             if v_w and v1 and v2 and v3 and v4:
-                preco_entrada = float(cl_d.iloc[-1])
+                entrada = float(cl_d.iloc[-1])
                 
-                # Definição de Stops por Categoria
-                if ativo in acoes:
-                    s_loss, s_gain, tipo = 0.05, 0.075, "Ação" # Gain médio 7.5%
-                elif ativo in bdrs:
-                    s_loss, s_gain, tipo = 0.04, 0.06, "BDR"
-                else: # ETFs
-                    s_loss, s_gain, tipo = 0.03, 0.045, "ETF" # Gain médio 4.5%
+                # Definição de regras por tipo
+                if "34" in ativo: # BDR
+                    p_loss, p_gain = 4, 6
+                elif "11" in ativo: # ETF
+                    p_loss, p_gain = 3, 4.5 # Usando média do intervalo 4-5%
+                else: # Ação
+                    p_loss, p_gain = 5, 7.5 # Usando média do intervalo 7-8%
 
                 resultados.append({
                     "Ativo": ativo.replace(".SA", ""),
-                    "Tipo": tipo,
-                    "Entrada": round(preco_entrada, 2),
-                    "Stop Loss (-%)": round(preco_entrada * (1 - s_loss), 2),
-                    "Stop Gain (+%)": round(preco_entrada * (1 + s_gain), 2),
-                    "Risco/Retorno": round((s_gain/s_loss), 2)
+                    "Entrada (R$)": round(entrada, 2),
+                    "Stop Loss (R$)": round(entrada * (1 - (p_loss/100)), 2),
+                    "% Loss": f"-{p_loss}%",
+                    "Stop Gain (R$)": round(entrada * (1 + (p_gain/100)), 2),
+                    "% Gain": f"+{p_gain}%",
+                    "R/R": round(p_gain/p_loss, 2)
                 })
         except: continue
         progresso.progress((i + 1) / len(ativos))
@@ -116,10 +114,8 @@ if st.button(f"🔍 EXECUTAR SCANNER COMPLETO ({len(ativos)} ATIVOS)"):
     progresso.empty()
 
     if resultados:
-        st.success(f"Oportunidades encontradas com Gestão de Risco:")
-        st.dataframe(pd.DataFrame(resultados), use_container_width=True)
+        st.table(pd.DataFrame(resultados))
     else:
-        st.warning("Nenhum ativo passou pelos filtros e critérios de rompimento.")
+        st.warning("Nenhum ativo encontrado com o setup completo neste momento.")
 
 st.divider()
-st.caption("⚠️ Proibido mover ou alargar o Stop Loss. Relação mínima R/R: 1,5.")
