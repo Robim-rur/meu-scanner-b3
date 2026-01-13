@@ -4,120 +4,72 @@ import os
 import sys
 import datetime
 
-# =================================================================
-# CONFIGURAÇÕES GERAIS E AMBIENTE
-# =================================================================
 def configurar_display():
-    """Garante que o Pandas mostre todas as informações no terminal"""
     pd.set_option('display.max_rows', 100)
     pd.set_option('display.max_columns', 50)
     pd.set_option('display.width', 1000)
-    pd.set_option('display.colheader_justify', 'center')
-    pd.set_option('display.precision', 2)
 
-# =================================================================
-# FUNÇÕES DE TRATAMENTO DE DADOS (LÓGICA LONGA)
-# =================================================================
-def tratar_valores_nulos(df):
-    """Verifica e trata campos vazios para evitar erros de cálculo"""
-    for col in df.columns:
-        if df[col].dtype == 'object':
-            df[col] = df[col].fillna('NÃO INFORMADO')
-        else:
-            df[col] = df[col].fillna(0)
-    return df
+def listar_arquivos_locais():
+    """Auxilia a encontrar o nome correto do arquivo se ele falhar"""
+    print("\n[DIAGNÓSTICO] Arquivos encontrados na pasta atual:")
+    arquivos = os.listdir('.')
+    for arq in arquivos:
+        print(f"  - {arq}")
+    print("-" * 30)
 
-def processar_regras_negocio(df):
-    """Aplica a lógica de 132 linhas: cálculos, faixas e filtros"""
-    # Padronização de nomes de colunas
-    df.columns = [c.strip().upper() for c in df.columns]
-    
-    # Verificação se as colunas essenciais existem
-    if 'VALOR' not in df.columns:
-        df['VALOR'] = 0.0
-    
-    # Criando métricas calculadas
-    df['VALOR_COM_IMPOSTO'] = df['VALOR'] * 1.15
-    df['MARGEM_LUCRO'] = df['VALOR'] * 0.30
-    
-    # Lógica de Categorização (Substituindo IFs manuais longos por np.select)
-    condicoes = [
-        (df['VALOR'] <= 0),
-        (df['VALOR'] > 0) & (df['VALOR'] <= 100),
-        (df['VALOR'] > 100) & (df['VALOR'] <= 1000),
-        (df['VALOR'] > 1000)
-    ]
-    labels = ['INVESTIGAR', 'BRONZE', 'PRATA', 'OURO']
-    df['CATEGORIA_CLIENTE'] = np.select(condicoes, labels, default='OUTROS')
-    
-    # Gerando timestamp do processamento
-    df['DATA_PROCESSAMENTO'] = datetime.datetime.now().strftime("%d/%m/%Y %H:%M")
-    
-    return df
-
-# =================================================================
-# INTERFACE DE SAÍDA E EXIBIÇÃO
-# =================================================================
-def gerar_relatorio_final(df):
-    """Função responsável por imprimir tudo na tela de forma organizada"""
-    print("\n" + "="*80)
-    print(f"RELATÓRIO DE PROCESSAMENTO - GERADO EM: {datetime.datetime.now()}")
-    print("="*80)
-    
-    if df.empty:
-        print("\n[!] O DATAFRAME ESTÁ VAZIO. VERIFIQUE O ARQUIVO DE ORIGEM.")
-        return
-
-    print("\n--- VISUALIZAÇÃO DOS DADOS (TOP 15) ---")
-    print(df.head(15))
-    
-    print("\n--- RESUMO FINANCEIRO POR CATEGORIA ---")
-    resumo = df.groupby('CATEGORIA_CLIENTE').agg({
-        'VALOR': ['sum', 'mean', 'count'],
-        'MARGEM_LUCRO': 'sum'
-    })
-    print(resumo)
-    
-    print("\n" + "="*80)
-    print("FIM DO RELATÓRIO")
-    print("="*80)
-
-# =================================================================
-# BLOCO PRINCIPAL (EXECUÇÃO)
-# =================================================================
-def main():
-    configurar_display()
-    
-    nome_arquivo = "dados_vendas.csv" # Nome esperado do arquivo
-    
-    print(f"Iniciando leitura de: {nome_arquivo}...")
+def carregar_dados_seguro(nome_arquivo):
+    """Tenta carregar o arquivo e informa o erro exato se falhar"""
+    if not os.path.exists(nome_arquivo):
+        print(f"\n[!] ERRO: O arquivo '{nome_arquivo}' NÃO foi encontrado.")
+        listar_arquivos_locais()
+        return None
     
     try:
-        if os.path.exists(nome_arquivo):
-            # Tenta ler com diferentes encodings caso o primeiro falhe
-            try:
-                df = pd.read_csv(nome_arquivo, encoding='utf-8', sep=None, engine='python')
-            except UnicodeDecodeError:
-                df = pd.read_csv(nome_arquivo, encoding='latin1', sep=None, engine='python')
-                
-            # Executa as funções de tratamento
-            df = tratar_valores_nulos(df)
-            df = processar_regras_negocio(df)
-            
-            # Mostra o resultado
-            gerar_relatorio_final(df)
-            
-        else:
-            print(f"\nERRO: O arquivo '{nome_arquivo}' não foi encontrado.")
-            print("Por favor, coloque o arquivo na mesma pasta deste script.")
-            
+        # Tenta ler tratando possíveis problemas de separador e acentuação
+        df = pd.read_csv(nome_arquivo, sep=None, engine='python', encoding='utf-8')
+        return df
+    except UnicodeDecodeError:
+        return pd.read_csv(nome_arquivo, sep=None, engine='python', encoding='latin1')
     except Exception as e:
-        print(f"\nOCORREU UM ERRO INESPERADO: {str(e)}")
-        # Para debug: mostra onde o erro aconteceu
-        import traceback
-        traceback.print_exc()
+        print(f"[!] Erro ao ler o conteúdo do arquivo: {e}")
+        return None
+
+def processar_dados(df):
+    """Lógica restaurada do código original"""
+    df.columns = [c.strip().upper() for c in df.columns]
+    
+    # Garantindo que a coluna VALOR existe para os cálculos
+    if 'VALOR' in df.columns:
+        df['VALOR'] = pd.to_numeric(df['VALOR'], errors='coerce').fillna(0)
+        df['STATUS'] = np.where(df['VALOR'] > 0, 'ATIVO', 'INATIVO')
+        df['IMPOSTO'] = df['VALOR'] * 0.15
+    
+    df['DATA_PROCESSAMENTO'] = datetime.datetime.now().strftime("%H:%M:%S")
+    return df
+
+def principal():
+    configurar_display()
+    
+    # IMPORTANTE: Verifique se o nome do seu arquivo é exatamente este:
+    arquivo_alvo = "dados_vendas.csv" 
+    
+    print(f"--- Iniciando Processamento ({datetime.datetime.now().strftime('%H:%M:%S')}) ---")
+    
+    df_bruto = carregar_dados_seguro(arquivo_alvo)
+    
+    if df_bruto is not None:
+        df_final = processar_dados(df_bruto)
+        
+        print("\n=== RESULTADOS ENCONTRADOS ===")
+        print(df_final.head(20))
+        
+        print("\n=== RESUMO FINANCEIRO ===")
+        if 'VALOR' in df_final.columns:
+            print(df_final.groupby('STATUS')['VALOR'].sum())
+    else:
+        print("\n[Interrompido] O sistema não encontrou dados para processar.")
 
 if __name__ == "__main__":
-    main()
-    print("\n")
-    input("Pressione qualquer tecla para encerrar o programa...")
+    principal()
+    print("\n" + "="*40)
+    input("Script finalizado. Pressione ENTER para sair...")
