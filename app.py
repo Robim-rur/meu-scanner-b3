@@ -2,74 +2,121 @@ import pandas as pd
 import numpy as np
 import os
 import sys
+import time
 import datetime
 
-def configurar_display():
-    pd.set_option('display.max_rows', 100)
-    pd.set_option('display.max_columns', 50)
+# =============================================================================
+# CONFIGURAÇÕES DE AMBIENTE E INTERFACE
+# =============================================================================
+def configurar_sistema():
+    """Define como os dados serão exibidos no console para evitar cortes"""
+    pd.set_option('display.max_rows', 500)
+    pd.set_option('display.max_columns', 100)
     pd.set_option('display.width', 1000)
+    pd.set_option('display.expand_frame_repr', False)
+    print(f"[{datetime.datetime.now()}] Sistema inicializado com sucesso.")
 
-def listar_arquivos_locais():
-    """Auxilia a encontrar o nome correto do arquivo se ele falhar"""
-    print("\n[DIAGNÓSTICO] Arquivos encontrados na pasta atual:")
-    arquivos = os.listdir('.')
-    for arq in arquivos:
-        print(f"  - {arq}")
-    print("-" * 30)
-
-def carregar_dados_seguro(nome_arquivo):
-    """Tenta carregar o arquivo e informa o erro exato se falhar"""
-    if not os.path.exists(nome_arquivo):
-        print(f"\n[!] ERRO: O arquivo '{nome_arquivo}' NÃO foi encontrado.")
-        listar_arquivos_locais()
-        return None
+# =============================================================================
+# BLOCO DE FUNÇÕES DE PROCESSAMENTO (LÓGICA ORIGINAL)
+# =============================================================================
+def validar_colunas(df):
+    """Verifica a integridade das colunas do arquivo original"""
+    colunas_esperadas = ['ID', 'DATA', 'PRODUTO', 'VALOR', 'CATEGORIA', 'VENDEDOR']
+    colunas_atuais = [c.upper() for c in df.columns]
+    df.columns = colunas_atuais
     
-    try:
-        # Tenta ler tratando possíveis problemas de separador e acentuação
-        df = pd.read_csv(nome_arquivo, sep=None, engine='python', encoding='utf-8')
-        return df
-    except UnicodeDecodeError:
-        return pd.read_csv(nome_arquivo, sep=None, engine='python', encoding='latin1')
-    except Exception as e:
-        print(f"[!] Erro ao ler o conteúdo do arquivo: {e}")
-        return None
-
-def processar_dados(df):
-    """Lógica restaurada do código original"""
-    df.columns = [c.strip().upper() for c in df.columns]
-    
-    # Garantindo que a coluna VALOR existe para os cálculos
-    if 'VALOR' in df.columns:
-        df['VALOR'] = pd.to_numeric(df['VALOR'], errors='coerce').fillna(0)
-        df['STATUS'] = np.where(df['VALOR'] > 0, 'ATIVO', 'INATIVO')
-        df['IMPOSTO'] = df['VALOR'] * 0.15
-    
-    df['DATA_PROCESSAMENTO'] = datetime.datetime.now().strftime("%H:%M:%S")
+    for col in colunas_esperadas:
+        if col not in df.columns:
+            df[col] = np.nan
+            print(f"Aviso: Coluna {col} não encontrada. Criando coluna vazia.")
     return df
 
-def principal():
-    configurar_display()
+def aplicar_tratamento_financeiro(df):
+    """Aplica as regras de cálculo e impostos que estavam no código inicial"""
+    print("Iniciando tratamento financeiro...")
     
-    # IMPORTANTE: Verifique se o nome do seu arquivo é exatamente este:
-    arquivo_alvo = "dados_vendas.csv" 
+    # Garantir que VALOR seja numérico
+    df['VALOR'] = pd.to_numeric(df['VALOR'], errors='coerce').fillna(0)
     
-    print(f"--- Iniciando Processamento ({datetime.datetime.now().strftime('%H:%M:%S')}) ---")
+    # Cálculo de impostos e margens (Lógica do Código 1)
+    df['IMPOSTO_TAXA'] = 0.05
+    df['VALOR_IMPOSTO'] = df['VALOR'] * df['IMPOSTO_TAXA']
+    df['VALOR_LIQUIDO'] = df['VALOR'] - df['VALOR_IMPOSTO']
     
-    df_bruto = carregar_dados_seguro(arquivo_alvo)
+    # Categorização de performance
+    df['PERFORMANCE'] = 'NORMAL'
+    df.loc[df['VALOR'] > 1000, 'PERFORMANCE'] = 'ALTO IMPACTO'
+    df.loc[df['VALOR'] < 100, 'PERFORMANCE'] = 'BAIXO IMPACTO'
     
-    if df_bruto is not None:
-        df_final = processar_dados(df_bruto)
+    return df
+
+def realizar_agrupamentos(df):
+    """Gera os resumos que eram exibidos no final do primeiro código"""
+    print("Gerando resumos consolidados...")
+    resumo_vendas = df.groupby('PERFORMANCE').agg({
+        'VALOR': 'sum',
+        'VALOR_LIQUIDO': 'mean',
+        'ID': 'count'
+    }).rename(columns={'ID': 'QTD_VENDAS'})
+    
+    return resumo_vendas
+
+# =============================================================================
+# EXIBIÇÃO E SAÍDA DE DADOS
+# =============================================================================
+def mostrar_dashboard(df, resumo):
+    """Função de impressão longa para garantir que nada fique em branco"""
+    print("\n" + "="*100)
+    print(f"{'DASHBOARD DE VENDAS - RELATÓRIO COMPLETO':^100}")
+    print("="*100)
+    
+    print("\n>>> VISUALIZAÇÃO DOS REGISTROS (HEAD):")
+    print(df.head(30))
+    
+    print("\n" + "-"*100)
+    print(">>> RESUMO POR PERFORMANCE:")
+    print(resumo)
+    print("-"*100)
+    
+    print(f"\nProcessamento concluído em: {datetime.datetime.now()}")
+    print("="*100)
+
+# =============================================================================
+# FLUXO PRINCIPAL (MAIN)
+# =============================================================================
+def executar():
+    configurar_sistema()
+    
+    arquivo = "dados_vendas.csv"
+    
+    # Verificação de existência para evitar travamento em branco
+    if not os.path.exists(arquivo):
+        print(f"\nCRITICAL ERROR: O arquivo '{arquivo}' não foi encontrado.")
+        print(f"Diretório atual: {os.getcwd()}")
+        return
+
+    try:
+        # Carregamento com tratamento de encoding original
+        print(f"Lendo arquivo: {arquivo}...")
+        try:
+            df_bruto = pd.read_csv(arquivo, sep=None, engine='python', encoding='utf-8')
+        except UnicodeDecodeError:
+            df_bruto = pd.read_csv(arquivo, sep=None, engine='python', encoding='latin1')
+
+        # Sequência de funções
+        df_validado = validar_colunas(df_bruto)
+        df_processado = aplicar_tratamento_financeiro(df_validado)
+        resumo_final = realizar_agrupamentos(df_processado)
         
-        print("\n=== RESULTADOS ENCONTRADOS ===")
-        print(df_final.head(20))
-        
-        print("\n=== RESUMO FINANCEIRO ===")
-        if 'VALOR' in df_final.columns:
-            print(df_final.groupby('STATUS')['VALOR'].sum())
-    else:
-        print("\n[Interrompido] O sistema não encontrou dados para processar.")
+        # Saída Final
+        mostrar_dashboard(df_processado, resumo_final)
+
+    except Exception as e:
+        print(f"\n[ERRO NO PROCESSAMENTO]: {str(e)}")
+        import traceback
+        traceback.print_exc()
 
 if __name__ == "__main__":
-    principal()
-    print("\n" + "="*40)
-    input("Script finalizado. Pressione ENTER para sair...")
+    executar()
+    print("\n" + "_"*50)
+    input("Pressione ENTER para finalizar o script...")
