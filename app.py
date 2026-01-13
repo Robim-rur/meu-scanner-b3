@@ -1,176 +1,133 @@
-import yfinance as yf
-import pandas as pd
-import pandas_ta as ta
-import sys
 from datetime import datetime, timedelta
+import sys
+import pandas as pd
+import yfinance as yf
+import numpy as np
+from ta.momentum import StochasticOscillator
+from ta.trend import ADXIndicator
 
-# ======================================
-# CONFIGURAÇÕES GERAIS
-# ======================================
-QTDE_ATIVOS = 200
-RR_MINIMO = 1.5
-PREFIXO_SENHA = "CRUVI"
-
-STOP_LOSS = {
-    "ACAO": 0.05,
-    "BDR": 0.04,
-    "ETF": 0.03
-}
-
-STOP_GAIN = {
-    "ACAO": 0.08,
-    "BDR": 0.06,
-    "ETF": 0.05
-}
-
-ATIVOS_B3 = [
-    "PETR4.SA","VALE3.SA","ITUB4.SA","BBDC4.SA","BBAS3.SA","ABEV3.SA",
-    "WEGE3.SA","PRIO3.SA","RADL3.SA","RENT3.SA","SUZB3.SA","JBSS3.SA",
-    "BOVA11.SA","IVVB11.SA","SMAL11.SA"
-]
-
-# ======================================
+# =====================================
 # VALIDAÇÃO DE SENHA (30 DIAS)
-# ======================================
+# =====================================
+
 def validar_senha():
     senha = input("Digite sua senha de acesso: ").strip()
 
     try:
-        prefixo, data_str, codigo = senha.split("-")
+        prefixo, data_str, _ = senha.split("-")
 
-        if prefixo != PREFIXO_SENHA:
-            raise Exception
+        if prefixo != "CRUVI":
+            raise ValueError
 
         data_inicio = datetime.strptime(data_str, "%Y-%m-%d")
         validade = data_inicio + timedelta(days=30)
 
         if datetime.now() > validade:
-            print("\n❌ Licença expirada.")
+            print("Licença expirada.")
             sys.exit()
 
-        print("\n✅ Acesso liberado até:", validade.strftime("%d/%m/%Y"))
+        print(f"Acesso liberado até {validade.strftime('%d/%m/%Y')}")
 
     except:
-        print("\n❌ Senha inválida.")
+        print("Senha inválida.")
         sys.exit()
 
-# ======================================
-# FUNÇÕES AUXILIARES
-# ======================================
-def classificar_ativo(ticker):
-    if ticker.endswith("11.SA"):
-        return "ETF"
-    elif ticker.endswith("34.SA"):
-        return "BDR"
-    else:
-        return "ACAO"
+# =====================================
+# LISTA DE ATIVOS (EXEMPLO – 200 MAIORES)
+# =====================================
 
-def calcular_liquidez(ticker):
-    try:
-        df = yf.download(ticker, period="3mo", interval="1d", progress=False)
-        df["Financeiro"] = df["Close"] * df["Volume"]
-        return df["Financeiro"].mean()
-    except:
-        return 0
+ATIVOS = [
+    "PETR4.SA", "VALE3.SA", "ITUB4.SA", "BBDC4.SA",
+    "ABEV3.SA", "BBAS3.SA", "WEGE3.SA"
+]
 
-def top_ativos_liquidos(lista, qtd):
-    dados = [(ativo, calcular_liquidez(ativo)) for ativo in lista]
-    dados.sort(key=lambda x: x[1], reverse=True)
-    return [x[0] for x in dados[:qtd]]
+# =====================================
+# SCANNER COM SEU SETUP
+# =====================================
 
-# ======================================
-# FILTROS DO SETUP (INVISÍVEL)
-# ======================================
-def tendencia_alta_semanal(df):
-    df["MM200"] = ta.sma(df["Close"], length=200)
-    return df["Close"].iloc[-1] > df["MM200"].iloc[-1]
+def analisar_ativo(ticker):
+    df = yf.download(ticker, period="1y", interval="1d", progress=False)
 
-def filtro_semanal(ticker):
-    df = yf.download(ticker, period="2y", interval="1wk", progress=False)
-    if len(df) < 50:
-        return False
+    if len(df) < 200:
+        return None
 
-    stoch = ta.stoch(df["High"], df["Low"], df["Close"])
-    df = pd.concat([df, stoch], axis=1)
-
-    return (
-        df["STOCHk_14_3_3"].iloc[-1] > df["STOCHd_14_3_3"].iloc[-1]
-        and tendencia_alta_semanal(df)
+    # --------- ESTOCÁSTICO DIÁRIO ---------
+    estoc_d = StochasticOscillator(
+        high=df["High"],
+        low=df["Low"],
+        close=df["Close"],
+        window=14,
+        smooth_window=3
     )
 
-def filtro_diario(ticker):
-    df = yf.download(ticker, period="6mo", interval="1d", progress=False)
-    if len(df) < 50:
-        return None
+    df["k_d"] = estoc_d.stoch()
+    df["d_d"] = estoc_d.stoch_signal()
 
-    stoch = ta.stoch(df["High"], df["Low"], df["Close"])
-    adx = ta.adx(df["High"], df["Low"], df["Close"])
+    # --------- ADX ---------
+    adx = ADXIndicator(df["High"], df["Low"], df["Close"], window=14)
+    df["adx"] = adx.adx()
 
-    df = pd.concat([df, stoch, adx], axis=1)
+    # --------- ESTOCÁSTICO SEMANAL ---------
+    semanal = df.resample("W").last()
 
-    if (
-        df["STOCHk_14_3_3"].iloc[-1] > df["STOCHd_14_3_3"].iloc[-1]
-        and df["ADX_14"].iloc[-1] > 15
+    estoc_s = StochasticOscillator(
+        high=semanal["High"],
+        low=semanal["Low"],
+        close=semanal["Close"],
+        window=14,
+        smooth_window=3
+    )
+
+    semanal["k_s"] = estoc_s.stoch()
+    semanal["d_s"] = estoc_s.stoch_signal()
+
+    # --------- CONDIÇÕES DO SETUP ---------
+    if not (
+        semanal["k_s"].iloc[-1] > semanal["d_s"].iloc[-1] and
+        df["k_d"].iloc[-1] > df["d_d"].iloc[-1] and
+        df["adx"].iloc[-1] > 15
     ):
-        return df
-
-    return None
-
-# ======================================
-# CÁLCULO DO TRADE
-# ======================================
-def calcular_trade(df, ticker):
-    classe = classificar_ativo(ticker)
-    entrada = df["Close"].iloc[-1]
-
-    stop = entrada * (1 - STOP_LOSS[classe])
-    gain = entrada * (1 + STOP_GAIN[classe])
-
-    risco = entrada - stop
-    retorno = gain - entrada
-    rr = retorno / risco
-
-    if rr < RR_MINIMO:
         return None
+
+    preco = df["Close"].iloc[-1]
+
+    # --------- CLASSIFICAÇÃO SIMPLES ---------
+    if "ETF" in ticker:
+        stop = 0.03
+        gain = 0.05
+    elif "BDR" in ticker:
+        stop = 0.04
+        gain = 0.06
+    else:
+        stop = 0.05
+        gain = 0.08
 
     return {
-        "Ativo": ticker.replace(".SA",""),
-        "Classe": classe,
-        "Entrada": round(entrada, 2),
-        "Stop": round(stop, 2),
-        "Gain": round(gain, 2),
-        "Loss %": -STOP_LOSS[classe] * 100,
-        "Gain %": STOP_GAIN[classe] * 100,
-        "R/R": round(rr, 2)
+        "Ativo": ticker.replace(".SA", ""),
+        "Entrada": round(preco, 2),
+        "Stop (%)": stop * 100,
+        "Gain (%)": gain * 100
     }
 
-# ======================================
-# EXECUÇÃO PRINCIPAL
-# ======================================
+# =====================================
+# EXECUÇÃO
+# =====================================
+
 def executar_scanner():
-    ativos = top_ativos_liquidos(ATIVOS_B3, QTDE_ATIVOS)
     resultados = []
 
-    for ativo in ativos:
+    for ativo in ATIVOS:
         try:
-            if filtro_semanal(ativo):
-                df_diario = filtro_diario(ativo)
-                if df_diario is not None:
-                    trade = calcular_trade(df_diario, ativo)
-                    if trade:
-                        resultados.append(trade)
+            r = analisar_ativo(ativo)
+            if r:
+                resultados.append(r)
         except:
-            continue
+            pass
 
-    df_final = pd.DataFrame(resultados)
-    df_final["Data"] = datetime.now().strftime("%Y-%m-%d")
-    return df_final
+    return pd.DataFrame(resultados)
 
-# ======================================
-# START
-# ======================================
 if __name__ == "__main__":
     validar_senha()
     tabela = executar_scanner()
-    print("\n📊 ATIVOS COM ENTRADA NO DIA:\n")
-    print(tabela)
+    print("\nATIVOS COM ENTRADA NO DIA:\n")
+    print(tabela if not tabela.empty else "Nenhum ativo encontrado.")
