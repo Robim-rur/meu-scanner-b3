@@ -3,7 +3,7 @@ import yfinance as yf
 import pandas as pd
 import numpy as np
 
-# 1. Configuração de página deve ser sempre a primeira
+# 1. Configuração de página
 st.set_page_config(page_title="B3 VIP GOLD", layout="wide")
 
 # 2. LOGIN (BLOQUEIO TOTAL NO TOPO)
@@ -77,17 +77,19 @@ for ativo in ativos:
         ], axis=1).max(axis=1)
         atr = tr.rolling(14).sum()
         
-        # Correção do erro de dimensão
+        # Correção técnica de dimensão
         di_plus = 100 * pd.Series(plus_dm.flatten(), index=df_d.index).rolling(14).sum() / atr
         di_minus = 100 * pd.Series(minus_dm.flatten(), index=df_d.index).rolling(14).sum() / atr
 
-        # REGRAS ORIGINAIS (COM O 4º FILTRO)
+        # REGRAS AJUSTADAS CONFORME PEDIDO:
+        # Semanal: Apenas exige preço acima da EMA 69
         semanal_ok = float(close_w.iloc[-1]) > float(ema69_w.iloc[-1])
+
+        # Diário: Filtros 1, 2 e 3 (Sem o filtro 4 de romper máxima)
         diario_ok = (
             float(close_d.iloc[-1]) > float(ema69_d.iloc[-1]) and
             float(di_plus.iloc[-1]) > float(di_minus.iloc[-1]) and
-            float(stoch_d.iloc[-1]) < 80 and
-            float(close_d.iloc[-1]) > float(df_d["High"].iloc[-2])
+            float(stoch_d.iloc[-1]) < 80
         )
 
         if semanal_ok and diario_ok:
