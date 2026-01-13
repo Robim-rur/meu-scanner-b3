@@ -1,104 +1,95 @@
-import streamlit as st
 import pandas as pd
 import numpy as np
+import os
+import sys
 import datetime
 
 # =============================================================================
-# 1. CONFIGURAÇÕES DE INTERFACE (LINHAS 1-20)
+# CONFIGURAÇÕES DE EXIBIÇÃO
 # =============================================================================
-st.set_page_config(page_title="Editor de Vendas", layout="wide")
+pd.set_option('display.max_rows', 500)
+pd.set_option('display.max_columns', 100)
+pd.set_option('display.width', 1000)
 
-def configurar_estilo():
-    """Define o título e as instruções iniciais"""
-    st.title("📊 Painel de Vendas Editável")
-    st.write("DICA: Clique duas vezes em qualquer célula da tabela abaixo para digitar seus próprios dados!")
-    st.markdown("---")
-
-# =============================================================================
-# 2. BANCO DE DADOS INICIAL (LINHAS 21-50)
-# =============================================================================
-def criar_base_inicial():
-    """Cria a estrutura inicial de dados que você verá na tela"""
-    dados = {
-        'ID': [1, 2, 3],
-        'PRODUTO': ['Exemplo A', 'Exemplo B', 'Exemplo C'],
-        'VALOR': [1000.00, 500.00, 150.00],
-        'VENDEDOR': ['Admin', 'Admin', 'Admin']
-    }
-    return pd.DataFrame(dados)
+def configurar_ambiente():
+    print(f"Processamento iniciado em: {datetime.datetime.now()}")
+    print("-" * 50)
 
 # =============================================================================
-# 3. LÓGICA DE PROCESSAMENTO (LINHAS 51-90)
+# FUNÇÕES DE TRATAMENTO DE DADOS
 # =============================================================================
-def processar_vendas(df):
-    """Aplica os cálculos automáticos baseados no que você digitou"""
-    # Garante que as colunas fiquem em maiúsculo
-    df.columns = [str(c).strip().upper() for c in df.columns]
+def tratar_dados(df):
+    # Padronização de colunas para maiúsculo
+    df.columns = [c.strip().upper() for c in df.columns]
     
-    if 'VALOR' in df.columns:
-        # Converte para número caso o usuário digite texto por erro
-        df['VALOR'] = pd.to_numeric(df['VALOR'], errors='coerce').fillna(0)
-        
-        # Cálculos automáticos (Imposto de 15%)
-        df['IMPOSTO'] = df['VALOR'] * 0.15
-        df['LUCRO'] = df['VALOR'] - df['IMPOSTO']
-        
-        # Classificação de Performance
-        conds = [
-            (df['VALOR'] >= 1000),
-            (df['VALOR'] >= 500) & (df['VALOR'] < 1000),
-            (df['VALOR'] < 500)
-        ]
-        status = ['ALTA', 'MÉDIA', 'BAIXA']
-        df['PERFORMANCE'] = np.select(conds, status, default='N/A')
-        
+    # Verificação de colunas obrigatórias
+    colunas_obrigatorias = ['ID', 'VALOR', 'PRODUTO', 'CATEGORIA']
+    for col in colunas_obrigatorias:
+        if col not in df.columns:
+            df[col] = 0
+            
+    # Conversão do campo VALOR para numérico
+    df['VALOR'] = pd.to_numeric(df['VALOR'], errors='coerce').fillna(0)
+    
+    # Cálculos de impostos e valores líquidos
+    df['IMPOSTO'] = df['VALOR'] * 0.10
+    df['LIQUIDO'] = df['VALOR'] - df['IMPOSTO']
+    
+    return df
+
+def gerar_categorias(df):
+    # Lógica de classificação baseada nos valores
+    condicoes = [
+        (df['VALOR'] >= 1000),
+        (df['VALOR'] >= 500) & (df['VALOR'] < 1000),
+        (df['VALOR'] < 500)
+    ]
+    valores = ['PREMIUM', 'PADRÃO', 'ECONÔMICO']
+    df['STATUS_VENDA'] = np.select(condicoes, valores, default='N/A')
     return df
 
 # =============================================================================
-# 4. EXIBIÇÃO E INTERAÇÃO (LINHAS 91-115)
+# RELATÓRIOS E SAÍDA
 # =============================================================================
-def exibir_interface(df_original):
-    """Cria a planilha interativa na tela"""
+def imprimir_relatorio(df):
+    print("\n>>> LISTAGEM DE VENDAS PROCESSADAS:")
+    print(df.head(20))
     
-    st.subheader("📝 Edite seus dados aqui:")
-    # Esta linha cria a tabela que você pode editar direto no site
-    df_editado = st.data_editor(df_original, num_rows="dynamic", use_container_width=True)
-    
-    st.markdown("---")
-    
-    # Processa o que o usuário acabou de digitar
-    df_final = processar_vendas(df_editado)
-    
-    col1, col2 = st.columns([2, 1])
-    
-    with col1:
-        st.subheader("📋 Tabela Processada")
-        st.dataframe(df_final, use_container_width=True)
-        
-    with col2:
-        st.subheader("📈 Resumo Automático")
-        if 'PERFORMANCE' in df_final.columns:
-            resumo = df_final.groupby('PERFORMANCE').agg({
-                'VALOR': 'sum',
-                'ID': 'count'
-            }).rename(columns={'ID': 'QTD'})
-            st.table(resumo)
+    print("\n>>> RESUMO POR STATUS DE VENDA:")
+    resumo = df.groupby('STATUS_VENDA').agg({
+        'VALOR': 'sum',
+        'LIQUIDO': 'mean',
+        'ID': 'count'
+    })
+    print(resumo)
 
 # =============================================================================
-# 5. EXECUÇÃO DO FLUXO (LINHAS 116-132)
+# EXECUÇÃO PRINCIPAL
 # =============================================================================
 def main():
-    configurar_estilo()
+    configurar_ambiente()
     
-    # Gera a base inicial para o usuário começar a editar
-    base_dados = criar_base_inicial()
+    arquivo = 'dados_vendas.csv'
     
-    # Chama a interface que permite a edição
-    exibir_interface(base_dados)
-    
-    st.markdown("---")
-    st.caption(f"Sistema operacional | {datetime.datetime.now().strftime('%d/%m/%Y %H:%M')}")
+    if os.path.exists(arquivo):
+        try:
+            # Tenta ler o arquivo original
+            df = pd.read_csv(arquivo, sep=',', encoding='utf-8')
+        except:
+            # Fallback para outro encoding se necessário
+            df = pd.read_csv(arquivo, sep=';', encoding='latin1')
+            
+        # Execução das funções na ordem original
+        df_tratado = tratar_dados(df)
+        df_final = gerar_categorias(df_tratado)
+        
+        imprimir_relatorio(df_final)
+        
+    else:
+        print(f"Erro: O arquivo {arquivo} não foi encontrado no diretório.")
+        print("Certifique-se de que o arquivo CSV está na mesma pasta do script.")
 
 if __name__ == "__main__":
     main()
-# Fim do código restaurado e completo (132 linhas).
+    print("\n" + "="*50)
+    input("Pressione qualquer tecla para sair...")
