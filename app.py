@@ -3,7 +3,8 @@ import yfinance as yf
 import pandas as pd
 import numpy as np
 
-st.set_page_config(page_title="B3 VIP GOLD", layout="wide")
+# Configuração da Página
+st.set_page_config(page_title="B3 VIP GOLD - SCANNER", layout="wide")
 
 # ======================
 # LOGIN
@@ -14,137 +15,123 @@ if "auth" not in st.session_state:
     st.session_state.auth = False
 
 if not st.session_state.auth:
-    st.title("🔐 Acesso Restrito")
-    senha = st.text_input("Senha de acesso", type="password")
-    if st.button("Entrar"):
+    st.markdown("<h2 style='text-align: center;'>🔐 ACESSO RESTRITO</h2>", unsafe_allow_html=True)
+    senha = st.text_input("Senha", type="password", placeholder="Digite sua senha...", label_visibility="collapsed")
+    if st.button("DESBLOQUEAR SISTEMA", use_container_width=True):
         if senha == SENHA:
             st.session_state.auth = True
             st.rerun()
-        else:
-            st.error("Senha incorreta")
     st.stop()
 
 # ======================
-# CONFIGURAÇÃO
+# INTERFACE E LISTA
 # ======================
-st.title("📊 Scanner B3 VIP GOLD")
-
-st.info(
-    "Os ativos listados abaixo **passaram pelo filtro do Setup VIP GOLD**.\n\n"
-    "O setup utiliza **múltiplos indicadores técnicos combinados**, "
-    "com análise de **tendência no semanal** e **entrada no diário**.\n\n"
-    "⚠️ O método não mostra todos os ativos — apenas os **tecnicamente autorizados**."
-)
+st.title("📊 Scanner B3 VIP GOLD (V2 - High Performance)")
+st.info("Filtros: Tendência Semanal (M69) + Inclinação do Estocástico Semanal + Gatilho Diário.")
 
 # Lista de ativos
 ativos = [
-    "PETR4.SA", "VALE3.SA", "ITUB4.SA", "BBAS3.SA",
-    "ABEV3.SA", "BBDC4.SA", "WEGE3.SA", "BOVA11.SA",
-    "MGLU3.SA", "RENT3.SA", "B3SA3.SA", "PRIO3.SA"
+    "PETR4.SA", "VALE3.SA", "ITUB4.SA", "BBAS3.SA", "BBDC4.SA", 
+    "ABEV3.SA", "WEGE3.SA", "MGLU3.SA", "RENT3.SA", "PRIO3.SA",
+    "B3SA3.SA", "GOAU4.SA", "GGBR4.SA", "CSNA3.SA", "RAIZ4.SA",
+    "BOVA11.SA", "IVVB11.SA", "SMALL11.SA", "AAPL34.SA", "AMZO34.SA",
+    "ELET3.SA", "SUZB3.SA", "LREN3.SA", "HYPE3.SA", "RADL3.SA"
 ]
 
-resultados = []
+if st.button("🔍 INICIAR VARREDURA COMPLETA"):
+    resultados = []
+    progresso = st.progress(0)
+    status = st.empty()
 
-# ======================
-# LOOP PRINCIPAL
-# ======================
-progress_bar = st.progress(0)
-status_text = st.empty()
+    for i, ticker_sa in enumerate(ativos):
+        try:
+            status.text(f"Analisando {ticker_sa}...")
+            
+            # Download Diário e Semanal
+            df_d = yf.download(ticker_sa, period="1y", interval="1d", progress=False)
+            df_w = yf.download(ticker_sa, period="2y", interval="1wk", progress=False)
 
-for i, ativo in enumerate(ativos):
-    status_text.text(f"Analisando {ativo}...")
-    
-    # Download dos dados
-    df_d = yf.download(ativo, period="1y", interval="1d", progress=False)
-    df_w = yf.download(ativo, period="2y", interval="1wk", progress=False)
+            if df_d.empty or df_w.empty or len(df_w) < 70:
+                continue
 
-    if df_d.empty or df_w.empty or len(df_d) < 70:
-        continue
-    
-    # Tratamento para evitar erro de Multi-Index no yfinance recente
-    if isinstance(df_d.columns, pd.MultiIndex):
-        df_d.columns = df_d.columns.get_level_values(0)
-    if isinstance(df_w.columns, pd.MultiIndex):
-        df_w.columns = df_w.columns.get_level_values(0)
+            # Limpeza MultiIndex
+            if isinstance(df_d.columns, pd.MultiIndex): df_d.columns = df_d.columns.get_level_values(0)
+            if isinstance(df_w.columns, pd.MultiIndex): df_w.columns = df_w.columns.get_level_values(0)
 
-    close_d = df_d["Close"]
-    close_w = df_w["Close"]
+            # --- 1. CÁLCULOS SEMANAIS ---
+            cl_w = df_w['Close']
+            m69_w = cl_w.ewm(span=69, adjust=False).mean()
+            
+            # Estocástico Semanal
+            low14_w, high14_w = df_w['Low'].rolling(14).min(), df_w['High'].rolling(14).max()
+            stk_w = 100 * ((cl_w - low14_w) / (high14_w - low14_w)).rolling(3).mean()
 
-    # Média 69 (Exponencial)
-    ema69_d = close_d.ewm(span=69, adjust=False).mean()
-    ema69_w = close_w.ewm(span=69, adjust=False).mean()
+            # FILTRO SEMANAL 01: Preço acima da M69
+            semanal_tendencia = float(cl_w.iloc[-1]) > float(m69_w.iloc[-1])
+            
+            # FILTRO SEMANAL 02: Estocástico não pode estar inclinado para baixo
+            # (Valor atual >= Valor da semana anterior)
+            semanal_stoch_up = float(stk_w.iloc[-1]) >= float(stk_w.iloc[-2])
 
-    # Estocástico Diário (14 períodos)
-    low14 = df_d["Low"].rolling(14).min()
-    high14 = df_d["High"].rolling(14).max()
-    stoch_d = 100 * (close_d - low14) / (high14 - low14)
+            if semanal_tendencia and semanal_stoch_up:
+                
+                # --- 2. CÁLCULOS DIÁRIOS (GATILHO) ---
+                cl_d = df_d['Close']
+                m69_d = cl_d.ewm(span=69, adjust=False).mean()
 
-    # DMI Diário - Cálculo Corrigido
-    up = df_d["High"].diff()
-    down = -df_d["Low"].diff()
+                # Estocástico Diário
+                l14_d, h14_d = df_d['Low'].rolling(14).min(), df_d['High'].rolling(14).max()
+                stk_d = 100 * ((cl_d - l14_d) / (h14_d - l14_d)).rolling(3).mean()
 
-    # Garantimos que plus_dm e minus_dm sejam Series com o mesmo índice do df_d
-    plus_dm = pd.Series(np.where((up > down) & (up > 0), up, 0.0), index=df_d.index)
-    minus_dm = pd.Series(np.where((down > up) & (down > 0), down, 0.0), index=df_d.index)
+                # DMI Diário
+                u, d = df_d['High'].diff(), -df_d['Low'].diff()
+                tr = pd.concat([df_d['High']-df_d['Low'], abs(df_d['High']-cl_d.shift()), abs(df_d['Low']-cl_d.shift())], axis=1).max(axis=1)
+                at_sum = tr.rolling(14).sum()
+                pi = 100 * (pd.Series(np.where((u>d)&(u>0), u, 0)).rolling(14).sum().values / at_sum.values)
+                mi = 100 * (pd.Series(np.where((d>u)&(d>0), d, 0)).rolling(14).sum().values / at_sum.values)
 
-    tr = pd.concat([
-        df_d["High"] - df_d["Low"],
-        abs(df_d["High"] - close_d.shift()),
-        abs(df_d["Low"] - close_d.shift())
-    ], axis=1).max(axis=1)
+                # VALIDAÇÃO DOS 4 GATILHOS DIÁRIOS
+                v1 = float(cl_d.iloc[-1]) > float(m69_d.iloc[-1])         # Preço > M69
+                v2 = float(pi[-1]) > float(mi[-1])                       # DMI+ > DMI-
+                v3 = float(stk_d.iloc[-1]) < 80                          # Não sobrecomprado
+                v4 = float(cl_d.iloc[-1]) > float(df_d['High'].iloc[-2]) # Rompeu máxima anterior
 
-    atr = tr.rolling(14).sum()
-    
-    # Cálculo dos DIs com tratamento de divisão por zero
-    di_plus = 100 * (plus_dm.rolling(14).sum() / atr)
-    di_minus = 100 * (minus_dm.rolling(14).sum() / atr)
+                if v1 and v2 and v3 and v4:
+                    ticker = ticker_sa.replace(".SA", "")
+                    
+                    # Definição de Stop por perfil de ativo
+                    if ticker.endswith('34'): s_loss, s_gain = 0.04, 0.06
+                    elif ticker.endswith('11') and ticker not in ['PSSA11', 'KLBN11', 'SULA11']: s_loss, s_gain = 0.03, 0.045
+                    else: s_loss, s_gain = 0.05, 0.075
 
-    # ======================
-    # REGRAS DO SETUP
-    # ======================
+                    preço_atual = float(cl_d.iloc[-1])
+                    resultados.append({
+                        "Ativo": ticker,
+                        "Sinal": "COMPRA VIP GOLD 🚀",
+                        "Preço": f"R$ {preço_atual:.2f}",
+                        "Stop Loss": f"R$ {preço_atual*(1-s_loss):.2f}",
+                        "Stop Gain": f"R$ {preço_atual*(1+s_gain):.2f}",
+                        "Estoc. Semanal": "📈 Subindo" if float(stk_w.iloc[-1]) > float(stk_w.iloc[-2]) else "➡️ Estável"
+                    })
 
-    # 1. SEMANAL EM TENDÊNCIA DE ALTA (Preço acima da média 69)
-    semanal_ok = float(close_w.iloc[-1]) > float(ema69_w.iloc[-1])
+        except Exception as e:
+            continue
+        
+        progresso.progress((i + 1) / len(ativos))
 
-    # 2. DIÁRIO: Preço > Média, DI+ > DI-, Estocástico não sobrecomprado, Rompimento da Máxima Anterior
-    try:
-        diario_ok = (
-            float(close_d.iloc[-1]) > float(ema69_d.iloc[-1]) and
-            float(di_plus.iloc[-1]) > float(di_minus.iloc[-1]) and
-            float(stoch_d.iloc[-1]) < 80 and
-            float(close_d.iloc[-1]) > float(df_d["High"].iloc[-2])
-        )
-    except:
-        diario_ok = False
+    status.empty()
+    progresso.empty()
 
-    if semanal_ok and diario_ok:
-        resultados.append({
-            "Ativo": ativo.replace(".SA", ""),
-            "Preço": round(float(close_d.iloc[-1]), 2),
-            "DMI+": round(float(di_plus.iloc[-1]), 2),
-            "Estocástico": round(float(stoch_d.iloc[-1]), 2)
-        })
-    
-    progress_bar.progress((i + 1) / len(ativos))
-
-status_text.empty()
-progress_bar.empty()
-
-# ======================
-# EXIBIÇÃO DOS RESULTADOS
-# ======================
-if resultados:
-    df_resultado = pd.DataFrame(resultados)
-    st.success(f"🔥 {len(df_resultado)} ativos encontrados com compra autorizada!")
-    
-    # Formatação da tabela
-    st.dataframe(
-        df_resultado.style.format({"Preço": "R$ {:.2f}", "DMI+": "{:.1f}", "Estocástico": "{:.1f}"}),
-        use_container_width=True
-    )
-else:
-    st.warning("Nenhum ativo passou pelo filtro VIP GOLD hoje. Aguarde uma melhor oportunidade.")
+    # EXIBIÇÃO
+    if resultados:
+        st.success(f"🔥 {len(resultados)} ativos filtrados com sucesso!")
+        st.table(pd.DataFrame(resultados))
+    else:
+        st.warning("Nenhum ativo passou por todos os filtros (Semanal + Diário) hoje.")
 
 st.divider()
-st.caption("Dados fornecidos via Yahoo Finance. Analise sempre o gráfico antes de operar.")
-
+st.markdown("""
+**Regras de Ouro aplicadas:**
+- **Filtro Semanal:** Preço acima da Média 69 + Estocástico Semanal NÃO pode estar caindo.
+- **Gatilho Diário:** Preço > M69 + DMI+ > DMI- + Estocástico < 80 + Rompimento da Máxima de ontem.
+""")
