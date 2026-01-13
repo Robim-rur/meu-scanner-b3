@@ -1,35 +1,46 @@
 import pandas as pd
 import numpy as np
+import sys
 
-def processar_dados(caminho_arquivo):
+def inicializar_sistema():
     try:
-        # Carregamento otimizado
-        df = pd.read_csv(caminho_arquivo)
-        
-        # Limpeza de colunas desnecessárias que inflavam o código anterior
+        # 1. Simulação/Carregamento de Dados (Ajuste para seu arquivo se necessário)
+        # Se você estiver usando um arquivo real, use: df = pd.read_csv('seu_arquivo.csv')
+        data = {
+            'id': range(1, 6),
+            'valor': [100, -50, 200, 0, 300],
+            'categoria': ['A', 'B', 'A', 'C', 'B']
+        }
+        df = pd.DataFrame(data)
+
+        # 2. Processamento (Onde o erro de "tela branca" costuma ocorrer)
+        if df.empty:
+            print("Atenção: O DataFrame está vazio.")
+            return
+
+        # Normalização de colunas
         df.columns = df.columns.str.strip().str.lower()
-        
-        # Lógica central: Filtro e Cálculo
-        # Em vez de 50 linhas de IFs, usamos mapeamento
+
+        # Lógica de Status
         df['status'] = np.where(df['valor'] > 0, 'Ativo', 'Inativo')
-        
-        # Agrupamento simplificado
-        resultado = df.groupby('status').agg({
-            'valor': 'sum',
-            'id': 'count'
-        }).reset_index()
-        
-        print("Processamento concluído com sucesso.")
-        return resultado
 
-    except FileNotFoundError:
-        print("Erro: Arquivo não encontrado.")
+        # 3. GARANTINDO A EXIBIÇÃO (Para não ficar branco)
+        print("-" * 30)
+        print("DADOS PROCESSADOS:")
+        print(df) 
+        print("-" * 30)
+        
+        # Agrupamento para resumo
+        resumo = df.groupby('status').agg({'valor': 'sum', 'id': 'count'}).reset_index()
+        
+        print("RESUMO FINAL:")
+        print(resumo)
+        return resumo
+
     except Exception as e:
-        print(f"Erro inesperado: {e}")
+        print(f"ERRO CRÍTICO: {e}")
 
-# Execução
 if __name__ == "__main__":
-    arquivo = "dados_vendas.csv"  # Altere para o seu arquivo
-    final_df = processar_dados(arquivo)
-    if final_df is not None:
-        print(final_df)
+    # Força a saída no console para evitar que o buffer segure a informação
+    resultado = inicializar_sistema()
+    sys.stdout.flush()
