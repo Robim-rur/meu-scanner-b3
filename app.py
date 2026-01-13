@@ -6,120 +6,69 @@ import pandas_ta as ta
 from datetime import datetime
 
 # =============================================================================
-# 1. CONFIGURAÇÕES DE INTERFACE (LINHAS 1-25)
+# 1. CONFIGURAÇÕES DE INTERFACE (ESTRUTURA COMPLETA)
 # =============================================================================
-st.set_page_config(page_title="Scanner de Sinais B3", layout="wide")
+st.set_page_config(page_title="Scanner B3 - Sinais de Entrada", layout="wide")
 
-def obter_indicadores_internos(df):
-    """Cálculos proprietários do setup (ocultos do cliente)"""
-    # Estocástico 14,3,3
+def calcular_indicadores_secretos(df):
+    """Cálculos do Setup: Estocástico 14,3,3 e ADX 14 (Oculto do Cliente)"""
     stoch = ta.stoch(df['High'], df['Low'], df['Close'], k=14, d=3, smooth_k=3)
-    # ADX 14
     adx = ta.adx(df['High'], df['Low'], df['Close'], length=14)
     return pd.concat([df, stoch, adx], axis=1)
 
 # =============================================================================
-# 2. PARÂMETROS DE RISCO E CLASSIFICAÇÃO (LINHAS 26-55)
+# 2. DEFINIÇÃO DE ALVOS E RISCO/RETORNO
 # =============================================================================
-def definir_alvos(ticker):
-    """Define Stop Loss e Gain conforme a classe do ativo"""
+def obter_gerenciamento(ticker):
+    """Define Stop Loss, Gain e valida R/R mínimo de 1.5"""
     t = ticker.upper()
+    # Ações: L 5% G 8% | BDRs: L 4% G 6% | ETFs: L 3% G 5%
     if t.endswith('34.SA'): 
         return 0.04, 0.06, "BDR"
     elif t.endswith('11.SA'): 
-        return 0.03, 0.05, "ETF" # Ajustado para R/R > 1.5
+        return 0.03, 0.05, "ETF"
     else: 
-        return 0.05, 0.08, "AÇÃO" # Ajustado para R/R > 1.5
+        return 0.05, 0.08, "AÇÃO"
 
 # =============================================================================
-# 3. MOTOR DE VARREDURA PRIVADO (LINHAS 56-90)
+# 3. MOTOR DE VARREDURA (CRITÉRIOS SEMANAL + DIÁRIO)
 # =============================================================================
-def processar_rastreio(ticker):
-    """Executa a lógica de filtragem sem expor os critérios na tela"""
+def analisar_ativo(ticker):
+    """Executa a checagem técnica rigorosa nos dois tempos gráficos"""
     try:
-        dados = yf.download(ticker, period="2y", interval="1d", progress=False)
-        if len(dados) < 200: return None
+        df = yf.download(ticker, period="2y", interval="1d", progress=False)
+        if len(df) < 200: return None
         
-        # Análise Semanal (Oculta)
-        df_w = dados.resample('W').last()
-        df_w = obter_indicadores_internos(df_w)
+        # FILTRO SEMANAL: Tendência de Alta (Preço > MM200) e Estocástico %K > %D
+        df_w = df.resample('W').last()
+        df_w = calcular_indicadores_secretos(df_w)
         df_w['SMA200'] = ta.sma(df_w['Close'], length=200)
         
-        autoriza_semanal = (df_w['STOCHk_14_3_3'].iloc[-1] > df_w['STOCHd_14_3_3'].iloc[-1]) and \
-                           (df_w['Close'].iloc[-1] > df_w['SMA200'].iloc[-1])
-        
-        if not autoriza_semanal: return None
+        semanal_ok = (df_w['STOCHk_14_3_3'].iloc[-1] > df_w['STOCHd_14_3_3'].iloc[-1]) and \
+                     (df_w['Close'].iloc[-1] > df_w['SMA200'].iloc[-1])
+        if not semanal_ok: return None
 
-        # Análise Diária (Oculta)
-        df_d = obter_indicadores_internos(dados)
-        autoriza_diario = (df_d['STOCHk_14_3_3'].iloc[-1] > df_d['STOCHd_14_3_3'].iloc[-1]) and \
-                          (df_d['ADX_14'].iloc[-1] > 15)
+        # FILTRO DIÁRIO: Estocástico %K > %D e ADX > 15
+        df_d = calcular_indicadores_secretos(df)
+        diario_ok = (df_d['STOCHk_14_3_3'].iloc[-1] > df_d['STOCHd_14_3_3'].iloc[-1]) and \
+                    (df_d['ADX_14'].iloc[-1] > 15)
         
-        if autoriza_diario:
+        if diario_ok:
             return df_d.iloc[-1]['Close']
         return None
     except:
         return None
 
 # =============================================================================
-# 4. EXIBIÇÃO PARA O CLIENTE (LINHAS 91-120)
+# 4. LISTA DOS 200 ATIVOS E EXECUÇÃO (VARREDURA REAL)
 # =============================================================================
 def main():
-    st.title("🎯 Scanner de Oportunidades - Mercado B3")
+    st.title("🎯 Scanner de Oportunidades Profissional")
     
-    # Lista de ativos que o cliente verá que estão sendo escaneados
-    lista_ativos = [
-        "PETR4.SA", "VALE3.SA", "ITUB4.SA", "BBDC4.SA", "ABEV3.SA", "BBAS3.SA",
-        "JBSS3.SA", "ELET3.SA", "WEGE3.SA", "RENT3.SA", "SUZB3.SA", "MGLU3.SA",
-        "B3SA3.SA", "LREN3.SA", "HAPV3.SA", "GGBR4.SA", "CSNA3.SA", "RAIL3.SA",
-        "AAPL34.SA", "GOGL34.SA", "AMZO34.SA", "MSFT34.SA", "MELI34.SA", "TSLA34.SA",
-        "BOVA11.SA", "IVVB11.SA", "SMAL11.SA", "XINA11.SA", "NASD11.SA", "HASH11.SA"
-    ]
-    
-    st.subheader("📋 Ativos em Monitoramento:")
-    # Exibe os ativos de forma organizada para o cliente ver o que está sendo analisado
-    st.caption(", ".join([t.replace(".SA", "") for t in lista_ativos]))
-    
-    st.markdown("---")
-    
-    hits = []
-    progresso_barra = st.progress(0)
-    status_texto = st.empty()
-    
-    for i, t in enumerate(lista_ativos):
-        ativo_nome = t.replace(".SA", "")
-        status_texto.text(f"Analisando: {ativo_nome}...")
-        
-        preco_entrada = processar_rastreio(t)
-        
-        if preco_entrada is not None:
-            loss_p, gain_p, classe = definir_alvos(t)
-            # Risco/Retorno garantido no mínimo 1.5
-            hits.append({
-                "ATIVO": ativo_nome,
-                "TIPO": classe,
-                "ENTRADA (R$)": round(float(preco_entrada), 2),
-                "STOP LOSS (R$)": round(float(preco_entrada * (1 - loss_p)), 2),
-                "LOSS (%)": f"{loss_p*100:.0f}%",
-                "STOP GAIN (R$)": round(float(preco_entrada * (1 + gain_p)), 2),
-                "GAIN (%)": f"{gain_p*100:.1f}%"
-            })
-        progresso_barra.progress((i + 1) / len(lista_ativos))
-
-    status_texto.text("Varredura completa!")
-    
-    st.subheader("🚀 Sinais de Entrada Confirmados:")
-    if hits:
-        df_final = pd.DataFrame(hits)
-        st.table(df_final)
-    else:
-        st.info("Nenhum ativo da lista preencheu os critérios de entrada no momento.")
-
-# =============================================================================
-# 5. INICIALIZAÇÃO (LINHAS 121-132)
-# =============================================================================
-if __name__ == "__main__":
-    try:
-        main()
-    except Exception as e:
-        st.error("Sistema em atualização. Por favor, aguarde alguns instantes.")
+    # LISTA EXPANDIDA COM 200 ATIVOS (AÇÕES, BDRS, ETFS)
+    ativos = [
+        "PETR4.SA", "VALE3.SA", "ITUB4.SA", "BBDC4.SA", "ABEV3.SA", "BBAS3.SA", "JBSS3.SA", "ELET3.SA", "WEGE3.SA", "RENT3.SA",
+        "ITSA4.SA", "HAPV3.SA", "GGBR4.SA", "SUZB3.SA", "B3SA3.SA", "MGLU3.SA", "LREN3.SA", "EQTL3.SA", "CSAN3.SA", "RDOR3.SA",
+        "RAIL3.SA", "PRIO3.SA", "VIBR3.SA", "UGPA3.SA", "SBSP3.SA", "ASAI3.SA", "CCRO3.SA", "RADL3.SA", "CMIG4.SA", "CPLE6.SA",
+        "TOTS3.SA", "CPFE3.SA", "ENEV3.SA", "EMBR3.SA", "BRFS3.SA", "CRFB3.SA", "MULT3.SA", "CSNA3.SA", "GOAU4.SA", "USIM5.SA",
+        "AAPL34.SA", "AMZO34.SA", "GOGL34.SA", "MSFT34.SA", "TSLA34.SA", "META34.SA", "NFLX34.SA", "NVDC34.SA", "MELI
