@@ -16,7 +16,7 @@ if "auth" not in st.session_state:
 if not st.session_state.auth:
     st.title("🔐 Acesso Restrito")
     senha = st.text_input("Senha de acesso", type="password")
-    if st.button("Entrar"):
+    if st.button("Entrar", use_container_width=True):
         if senha == SENHA:
             st.session_state.auth = True
             st.rerun()
@@ -27,16 +27,17 @@ if not st.session_state.auth:
 # ======================
 # INTERFACE
 # ======================
-st.title("📊 Scanner B3 VIP GOLD - Sincronia Semanal")
+st.title("📊 Scanner B3 VIP GOLD - Filtro Ajustado")
 st.markdown("---")
 
+# Lista de ativos
 ativos = [
     "PETR4.SA", "VALE3.SA", "ITUB4.SA", "BBAS3.SA", "BBDC4.SA", 
     "ABEV3.SA", "WEGE3.SA", "MGLU3.SA", "RENT3.SA", "PRIO3.SA",
     "B3SA3.SA", "GOAU4.SA", "GGBR4.SA", "CSNA3.SA", "BOVA11.SA"
 ]
 
-if st.button("🚀 INICIAR VARREDURA"):
+if st.button("🔍 INICIAR VARREDURA (Sem %K > %D no Semanal)", use_container_width=True):
     resultados = []
     progresso = st.progress(0)
     status_placeholder = st.empty()
@@ -53,15 +54,14 @@ if st.button("🚀 INICIAR VARREDURA"):
             if isinstance(df_d.columns, pd.MultiIndex): df_d.columns = df_d.columns.get_level_values(0)
             if isinstance(df_w.columns, pd.MultiIndex): df_w.columns = df_w.columns.get_level_values(0)
 
-            # --- 1. FILTRO SEMANAL (REGRAS DESCOBERTAS) ---
+            # --- 1. FILTRO SEMANAL (AUTORIZAÇÃO) ---
             cl_w = df_w["Close"]
             hi_w, lo_w = df_w["High"], df_w["Low"]
             m69_w = cl_w.ewm(span=69, adjust=False).mean()
 
             # Estocástico Semanal (14,3,3)
             stk_w_raw = 100 * ((cl_w - lo_w.rolling(14).min()) / (hi_w.rolling(14).max() - lo_w.rolling(14).min()))
-            k_w = stk_w_raw.rolling(3).mean() # %K
-            d_w = k_w.rolling(3).mean()       # %D
+            k_w = stk_w_raw.rolling(3).mean() # %K do semanal
 
             # DMI Semanal
             up_w, dw_w = hi_w.diff(), -lo_w.diff()
@@ -70,16 +70,15 @@ if st.button("🚀 INICIAR VARREDURA"):
             plus_w = 100 * (pd.Series(np.where((up_w>dw_w)&(up_w>0), up_w, 0)).rolling(14).sum().values / atr_w.values)
             minus_w = 100 * (pd.Series(np.where((dw_w>up_w)&(dw_w>0), dw_w, 0)).rolling(14).sum().values / atr_w.values)
 
-            # VALIDAÇÃO SEMANAL
+            # REGRAS SEMANAIS (Sem a trava de %K > %D)
             ok_semanal = (
                 float(cl_w.iloc[-1]) > float(m69_w.iloc[-1]) and     # Tendência Alta
-                float(k_w.iloc[-1]) >= float(k_w.iloc[-2]) and       # Não inclinado para baixo
-                float(k_w.iloc[-1]) > float(d_w.iloc[-1]) and        # %K > %D
+                float(k_w.iloc[-1]) >= float(k_w.iloc[-2]) and       # Inclinado para cima ou lateral
                 float(plus_w[-1]) > float(minus_w[-1])               # D+ > D-
             )
 
             if ok_semanal:
-                # --- 2. GATILHO DIÁRIO ---
+                # --- 2. GATILHO DIÁRIO (EXECUÇÃO) ---
                 cl_d = df_d["Close"]
                 hi_d, lo_d = df_d["High"], df_d["Low"]
                 m69_d = cl_d.ewm(span=69, adjust=False).mean()
@@ -101,14 +100,15 @@ if st.button("🚀 INICIAR VARREDURA"):
                     float(cl_d.iloc[-1]) > float(m69_d.iloc[-1]) and
                     float(plus_d[-1]) > float(minus_d[-1]) and
                     float(k_d.iloc[-1]) > float(d_d.iloc[-1]) and
-                    float(cl_d.iloc[-1]) > float(hi_d.iloc[-2]) # Rompimento da máxima anterior
+                    float(cl_d.iloc[-1]) > float(hi_d.iloc[-2])
                 )
 
                 if ok_diario:
                     resultados.append({
                         "Ativo": ticker.replace(".SA", ""),
                         "Preço": f"R$ {float(cl_d.iloc[-1]):.2f}",
-                        "Sinal": "COMPRA LIBERADA 🚀"
+                        "Filtro Semanal": "✅ AUTORIZADO",
+                        "Sinal": "COMPRA 🚀"
                     })
 
         except: continue
@@ -118,9 +118,9 @@ if st.button("🚀 INICIAR VARREDURA"):
     progresso.empty()
 
     if resultados:
-        st.success(f"Encontrados {len(resultados)} ativos com autorização completa!")
+        st.success(f"Encontrados {len(resultados)} ativos!")
         st.table(pd.DataFrame(resultados))
     else:
-        st.warning("Nenhum ativo passou nos filtros de autorização semanal e diária hoje.")
+        st.warning("Mesmo com o ajuste, nenhum ativo passou pelos filtros hoje.")
 
-st.info("Filtro Semanal: Tendência Alta + Estocástico (%K >= Ant. e %K > %D) + DMI+ > DMI-.")
+st.info("**Ajuste Feito:** Agora o Semanal autoriza se o Estocástico estiver subindo ou lateral, sem exigir o cruzamento de linhas.")
