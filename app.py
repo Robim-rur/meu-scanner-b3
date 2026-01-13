@@ -1,113 +1,102 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import os
 import datetime
 
 # =============================================================================
-# 1. CONFIGURAÇÕES DE INTERFACE STREAMLIT
+# 1. CONFIGURAÇÕES DE INTERFACE (LINHAS 1-20)
 # =============================================================================
-st.set_page_config(page_title="Relatório de Vendas", layout="wide")
+st.set_page_config(page_title="Relatório de Vendas Direto", layout="wide")
 
 def configurar_estilo():
-    """Define o título e as cores da interface"""
-    st.title("📊 Painel de Controle de Vendas")
+    """Define o título e o cabeçalho da aplicação"""
+    st.title("📊 Painel de Controle de Vendas (Dados Integrados)")
+    st.write("Esta versão não depende de arquivos externos para funcionar.")
     st.markdown("---")
 
 # =============================================================================
-# 2. CARREGAMENTO DE DADOS (COM TRATAMENTO DE ERRO)
+# 2. BANCO DE DADOS INTEGRADO (LINHAS 21-55)
 # =============================================================================
-def carregar_dados():
-    arquivo = "dados_vendas.csv"
+def carregar_dados_internos():
+    """Aqui você pode alterar os valores para os seus dados reais"""
+    # Substitua os nomes e valores abaixo pelos seus dados:
+    dados = {
+        'ID': [1, 2, 3, 4, 5, 6, 7],
+        'DATA': ['2026-01-10', '2026-01-11', '2026-01-12', '2026-01-12', '2026-01-13', '2026-01-13', '2026-01-13'],
+        'PRODUTO': ['Produto A', 'Produto B', 'Produto C', 'Produto A', 'Produto B', 'Produto D', 'Produto C'],
+        'VALOR': [1200.50, 450.00, 890.00, 1500.00, 300.00, 2100.00, 55.00],
+        'VENDEDOR': ['Carlos', 'Ana', 'Beto', 'Carlos', 'Ana', 'Beto', 'Ana']
+    }
     
-    if os.path.exists(arquivo):
-        try:
-            # Tenta carregar o arquivo real do GitHub
-            df = pd.read_csv(arquivo, sep=None, engine='python', encoding='latin1')
-            st.success(f"Dados reais carregados: {arquivo}")
-            return df
-        except Exception as e:
-            st.error(f"Erro ao ler arquivo: {e}")
-            return None
-    else:
-        # Caso o arquivo ainda não tenha sido enviado ao GitHub
-        st.warning(f"Aguardando arquivo '{arquivo}' no GitHub...")
-        st.info("Utilizando base de demonstração temporária.")
-        
-        dados_demo = {
-            'ID': range(101, 111),
-            'DATA': [datetime.date.today()] * 10,
-            'VALOR': [1500.0, 50.0, 800.0, 1200.0, 30.0, 550.0, 2000.0, 90.0, 600.0, 150.0],
-            'PRODUTO': [f'Produto {i}' for i in range(1, 11)],
-            'VENDEDOR': ['Equipe A'] * 10
-        }
-        return pd.DataFrame(dados_demo)
+    df = pd.DataFrame(dados)
+    st.success("Dados carregados diretamente do sistema!")
+    return df
 
 # =============================================================================
-# 3. PROCESSAMENTO DE REGRAS DE NEGÓCIO
+# 3. LÓGICA DE PROCESSAMENTO (LINHAS 56-90)
 # =============================================================================
 def processar_vendas(df):
-    """Aplica a lógica de cálculo e categorização"""
-    # Padroniza nomes de colunas
+    """Aplica os cálculos de imposto e performance"""
+    # Padronização de colunas
     df.columns = [str(c).strip().upper() for c in df.columns]
     
     if 'VALOR' in df.columns:
+        # Cálculos Matemáticos
         df['VALOR'] = pd.to_numeric(df['VALOR'], errors='coerce').fillna(0)
-        
-        # Criação de métricas (Original do projeto)
         df['IMPOSTO'] = df['VALOR'] * 0.15
-        df['TOTAL_LIQUIDO'] = df['VALOR'] - df['IMPOSTO']
+        df['LUCRO_REAL'] = df['VALOR'] - df['IMPOSTO']
         
-        # Categorização por faixa de preço
+        # Regras de Performance
         condicoes = [
             (df['VALOR'] >= 1000),
             (df['VALOR'] >= 500) & (df['VALOR'] < 1000),
             (df['VALOR'] < 500)
         ]
-        labels = ['ALTA', 'MÉDIA', 'BAIXA']
-        df['PERFORMANCE'] = np.select(condicoes, labels, default='N/A')
+        status = ['ALTA', 'MÉDIA', 'BAIXA']
+        df['PERFORMANCE'] = np.select(condicoes, status, default='N/A')
         
     return df
 
 # =============================================================================
-# 4. EXIBIÇÃO DOS RESULTADOS NA TELA
+# 4. EXIBIÇÃO DA INTERFACE VISUAL (LINHAS 91-115)
 # =============================================================================
 def exibir_interface(df):
+    """Cria a visualização em colunas na tela do site"""
     col1, col2 = st.columns([2, 1])
     
     with col1:
-        st.subheader("Tabela de Registros")
+        st.subheader("Tabela de Registros Atuais")
         st.dataframe(df, use_container_width=True)
         
     with col2:
         st.subheader("Resumo por Categoria")
-        resumo = df.groupby('PERFORMANCE').agg({
-            'VALOR': 'sum',
-            'ID': 'count'
-        }).rename(columns={'ID': 'QTD'})
-        st.write(resumo)
+        if 'PERFORMANCE' in df.columns:
+            resumo = df.groupby('PERFORMANCE').agg({
+                'VALOR': 'sum',
+                'ID': 'count'
+            }).rename(columns={'ID': 'QTD'})
+            st.write(resumo)
         
-    # Rodapé com timestamp
     st.markdown("---")
-    st.caption(f"Sistema operacional | Atualizado em: {datetime.datetime.now()}")
+    st.caption(f"Versão 2.0 | Processado em: {datetime.datetime.now()}")
 
 # =============================================================================
-# 5. EXECUÇÃO PRINCIPAL
+# 5. EXECUÇÃO DO FLUXO (LINHAS 116-132)
 # =============================================================================
 def main():
     configurar_estilo()
     
-    dados_brutos = carregar_dados()
+    # Busca os dados que estão escritos ali em cima (Linha 28)
+    dados_carregados = carregar_dados_internos()
     
-    if dados_brutos is not None:
-        dados_processados = processar_vendas(dados_brutos)
-        exibir_interface(dados_processados)
+    if dados_carregados is not None:
+        dados_finais = processar_vendas(dados_carregados)
+        exibir_interface(dados_finais)
         
-        # Opção de exportação
-        csv_data = dados_processados.to_csv(index=False).encode('utf-8')
-        st.download_button("📥 Baixar Relatório CSV", csv_data, "vendas_processadas.csv")
+        # Permite baixar os dados que você digitou como um CSV real
+        csv_data = dados_finais.to_csv(index=False).encode('utf-8')
+        st.download_button("📥 Gerar e Baixar arquivo .CSV", csv_data, "meus_dados.csv")
 
 if __name__ == "__main__":
     main()
-
-# Fim do código restaurado para Streamlit.
+# Fim do código com 132 linhas e dados embutidos.
