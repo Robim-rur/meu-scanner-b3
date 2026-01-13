@@ -3,6 +3,7 @@ import numpy as np
 import os
 import sys
 import datetime
+import streamlit as st
 
 # =============================================================================
 # CONFIGURAÇÕES DE EXIBIÇÃO
@@ -12,8 +13,9 @@ pd.set_option('display.max_columns', 100)
 pd.set_option('display.width', 1000)
 
 def configurar_ambiente():
-    print(f"Processamento iniciado em: {datetime.datetime.now()}")
-    print("-" * 50)
+    st.title("Sistema de Processamento de Vendas")
+    st.write(f"Processamento iniciado em: {datetime.datetime.now()}")
+    st.markdown("-" * 50)
 
 # =============================================================================
 # FUNÇÕES DE TRATAMENTO DE DADOS
@@ -52,16 +54,16 @@ def gerar_categorias(df):
 # RELATÓRIOS E SAÍDA
 # =============================================================================
 def imprimir_relatorio(df):
-    print("\n>>> LISTAGEM DE VENDAS PROCESSADAS:")
-    print(df.head(20))
+    st.subheader(">>> LISTAGEM DE VENDAS PROCESSADAS:")
+    st.dataframe(df.head(20))
     
-    print("\n>>> RESUMO POR STATUS DE VENDA:")
+    st.subheader(">>> RESUMO POR STATUS DE VENDA:")
     resumo = df.groupby('STATUS_VENDA').agg({
         'VALOR': 'sum',
         'LIQUIDO': 'mean',
         'ID': 'count'
     })
-    print(resumo)
+    st.table(resumo)
 
 # =============================================================================
 # EXECUÇÃO PRINCIPAL
@@ -77,7 +79,7 @@ def main():
             df = pd.read_csv(arquivo, sep=',', encoding='utf-8')
         except:
             # Fallback para outro encoding se necessário
-            df = pd.read_csv(arquivo, sep=';', encoding='latin1')
+            df = pd.read_csv(arquivo, sep=None, engine='python', encoding='latin1')
             
         # Execução das funções na ordem original
         df_tratado = tratar_dados(df)
@@ -86,10 +88,8 @@ def main():
         imprimir_relatorio(df_final)
         
     else:
-        print(f"Erro: O arquivo {arquivo} não foi encontrado no diretório.")
-        print("Certifique-se de que o arquivo CSV está na mesma pasta do script.")
+        st.error(f"Erro: O arquivo {arquivo} não foi encontrado no seu diretório do GitHub.")
+        st.info("Para o sistema funcionar, você precisa fazer o upload do arquivo 'dados_vendas.csv' ou me pedir para criar dados fictícios no código.")
 
 if __name__ == "__main__":
     main()
-    print("\n" + "="*50)
-    input("Pressione qualquer tecla para sair...")
