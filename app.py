@@ -1,93 +1,109 @@
+import streamlit as st
 import pandas as pd
 import numpy as np
-import os
-import sys
-import datetime
-import streamlit as st
+import yfinance as yf
+import pandas_ta as ta
+from datetime import datetime
 
 # =============================================================================
-# CONFIGURAÇÕES DE EXIBIÇÃO
+# 1. CONFIGURAÇÕES TÉCNICAS E INTERFACE (LINHAS 1-25)
 # =============================================================================
-pd.set_option('display.max_rows', 500)
-pd.set_option('display.max_columns', 100)
-pd.set_option('display.width', 1000)
+st.set_page_config(page_title="Scanner de Setup Exclusivo", layout="wide")
 
-def configurar_ambiente():
-    st.title("Sistema de Processamento de Vendas")
-    st.write(f"Processamento iniciado em: {datetime.datetime.now().strftime('%d/%m/%Y %H:%M:%S')}")
-    st.markdown("-" * 50)
-
-# =============================================================================
-# FUNÇÕES DE TRATAMENTO DE DADOS
-# =============================================================================
-def tratar_dados(df):
-    # Padronização de colunas para maiúsculo
-    df.columns = [c.strip().upper() for c in df.columns]
-    
-    # Verificação de colunas obrigatórias
-    colunas_obrigatorias = ['ID', 'VALOR', 'PRODUTO', 'CATEGORIA']
-    for col in colunas_obrigatorias:
-        if col not in df.columns:
-            df[col] = 0
-            
-    # Conversão do campo VALOR para numérico
-    df['VALOR'] = pd.to_numeric(df['VALOR'], errors='coerce').fillna(0)
-    
-    # Cálculos de impostos e valores líquidos
-    df['IMPOSTO'] = df['VALOR'] * 0.10
-    df['LIQUIDO'] = df['VALOR'] - df['IMPOSTO']
-    
-    return df
-
-def gerar_categorias(df):
-    # Lógica de classificação baseada nos valores
-    condicoes = [
-        (df['VALOR'] >= 1000),
-        (df['VALOR'] >= 500) & (df['VALOR'] < 1000),
-        (df['VALOR'] < 500)
-    ]
-    valores = ['PREMIUM', 'PADRÃO', 'ECONÔMICO']
-    df['STATUS_VENDA'] = np.select(condicoes, valores, default='N/A')
-    return df
+def obter_indicadores(df):
+    """Calcula Estocástico 14,3,3 e ADX 14"""
+    # Estocástico %K e %D
+    stoch = ta.stoch(df['High'], df['Low'], df['Close'], k=14, d=3, smooth_k=3)
+    # ADX
+    adx = ta.adx(df['High'], df['Low'], df['Close'], length=14)
+    return pd.concat([df, stoch, adx], axis=1)
 
 # =============================================================================
-# RELATÓRIOS E SAÍDA
+# 2. IDENTIFICAÇÃO DE CLASSE E GERENCIAMENTO (LINHAS 26-60)
 # =============================================================================
-def imprimir_relatorio(df):
-    st.subheader(">>> LISTAGEM DE VENDAS PROCESSADAS:")
-    st.dataframe(df.head(20), use_container_width=True)
-    
-    st.subheader(">>> RESUMO POR STATUS DE VENDA:")
-    resumo = df.groupby('STATUS_VENDA').agg({
-        'VALOR': 'sum',
-        'LIQUIDO': 'mean',
-        'ID': 'count'
-    }).rename(columns={'ID': 'QTD'})
-    st.table(resumo)
+def definir_parametros_risco(ticker):
+    """Retorna Stop Loss e Gain baseados na classe do ativo"""
+    t = ticker.upper()
+    # Critérios definidos: Ações (L:5% G:7-8%), BDRs (L:4% G:6%), ETFs (L:3% G:4-5%)
+    if t.endswith('34.SA'): # BDRs costumam terminar em 34
+        return 0.04, 0.06, "BDR"
+    elif t.endswith('11.SA'): # ETFs (Ex: BOVA11, IVVB11)
+        return 0.03, 0.045, "ETF"
+    else: # Ações (Padrão)
+        return 0.05, 0.075, "AÇÃO"
 
 # =============================================================================
-# EXECUÇÃO PRINCIPAL
+# 3. FILTRO DO SETUP (SEMANAL + DIÁRIO) (LINHAS 61-95)
+# =============================================================================
+def scanner_setup(ticker):
+    try:
+        # Puxa dados diários para converter em semanal também
+        dados = yf.download(ticker, period="2y", interval="1d", progress=False)
+        if len(dados) < 200: return None
+        
+        # --- FILTRO SEMANAL ---
+        df_w = dados.resample('W').last()
+        df_w = obter_indicadores(df_w)
+        df_w['SMA200'] = ta.sma(df_w['Close'], length=200)
+        
+        # Setup Semanal: %K > %D e Tendência Primária de Alta (Preço > MM200)
+        autoriza_w = (df_w['STOCHk_14_3_3'].iloc[-1] > df_w['STOCHd_14_3_3'].iloc[-1]) and \
+                     (df_w['Close'].iloc[-1] > df_w['SMA200'].iloc[-1])
+        
+        if not autoriza_w: return None
+
+        # --- FILTRO DIÁRIO ---
+        df_d = obter_indicadores(dados)
+        # Setup Diário: %K > %D e ADX > 15
+        autoriza_d = (df_d['STOCHk_14_3_3'].iloc[-1] > df_d['STOCHd_14_3_3'].iloc[-1]) and \
+                     (df_d['ADX_14'].iloc[-1] > 15)
+        
+        if autoriza_d:
+            return df_d.iloc[-1]['Close']
+        return None
+    except:
+        return None
+
+# =============================================================================
+# 4. PROCESSAMENTO E FILTRO R/R (LINHAS 96-115)
 # =============================================================================
 def main():
-    configurar_ambiente()
-    
-    # Criando os dados diretamente aqui para o sistema não dar erro de arquivo
-    dados_iniciais = {
-        'ID': [1, 2, 3, 4, 5],
-        'PRODUTO': ['Produto A', 'Produto B', 'Produto C', 'Produto D', 'Produto E'],
-        'VALOR': [1200.00, 450.00, 800.00, 2100.00, 55.00],
-        'CATEGORIA': ['Eletrônicos', 'Acessórios', 'Eletrônicos', 'Móveis', 'Acessórios']
-    }
-    
-    # Transformando em DataFrame (como se tivesse lido o CSV)
-    df = pd.DataFrame(dados_iniciais)
-    st.success("Dados carregados com sucesso do banco interno!")
-            
-    # Execução das funções na ordem original
-    df_tratado = tratar_dados(df)
-    df_final = gerar_categorias(df_tratado)
-    
-    imprimir_relatorio(df_final)
+    st.title("🚀 Scanner Swing Trade - B3")
+    st.write("Filtro: Estocástico (S/D) + ADX + Tendência + R/R Mínimo 1.5")
 
+    # Lista de exemplo (Em produção, aqui entrariam os 200 ativos mais líquidos)
+    tickers = ["PETR4.SA", "VALE3.SA", "ITUB4.SA", "BBDC4.SA", "IVVB11.SA", "AAPL34.SA", "BOVA11.SA"]
+    
+    tabela_final = []
+    with st.spinner('Analisando setups...'):
+        for t in tickers:
+            preco_fech = scanner_setup(t)
+            if preco_fech:
+                loss_p, gain_p, classe = definir_parametros_risco(t)
+                
+                # Cálculo de Risco/Retorno
+                rr_atual = gain_p / loss_p
+                
+                # Validação Final: R/R >= 1.5
+                if rr_atual >= 1.5:
+                    tabela_final.append({
+                        "ATIVO": t.replace(".SA", ""),
+                        "CLASSE": classe,
+                        "ENTRADA (R$)": round(preco_fech, 2),
+                        "STOP LOSS (R$)": round(preco_fech * (1 - loss_p), 2),
+                        "LOSS (%)": f"{loss_p*100:.0f}%",
+                        "STOP GAIN (R$)": round(preco_fech * (1 + gain_p), 2),
+                        "GAIN (%)": f"{gain_p*100:.1f}%",
+                        "R/R": round(rr_atual, 2)
+                    })
+
+    if tabela_final:
+        st.table(pd.DataFrame(tabela_final))
+    else:
+        st.info("Nenhum ativo preencheu todos os critérios do setup até o momento.")
+
+# =============================================================================
+# 5. INICIALIZAÇÃO (LINHAS 116-132)
+# =============================================================================
 if __name__ == "__main__":
     main()
