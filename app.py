@@ -1,13 +1,15 @@
 import yfinance as yf
 import pandas as pd
 import pandas_ta as ta
-from datetime import datetime
+import sys
+from datetime import datetime, timedelta
 
-# ===============================
-# CONFIGURAÇÕES
-# ===============================
+# ======================================
+# CONFIGURAÇÕES GERAIS
+# ======================================
 QTDE_ATIVOS = 200
 RR_MINIMO = 1.5
+PREFIXO_SENHA = "CRUVI"
 
 STOP_LOSS = {
     "ACAO": 0.05,
@@ -21,19 +23,40 @@ STOP_GAIN = {
     "ETF": 0.05
 }
 
-# ===============================
-# LISTA BASE DE ATIVOS B3
-# (você pode ampliar depois)
-# ===============================
 ATIVOS_B3 = [
     "PETR4.SA","VALE3.SA","ITUB4.SA","BBDC4.SA","BBAS3.SA","ABEV3.SA",
     "WEGE3.SA","PRIO3.SA","RADL3.SA","RENT3.SA","SUZB3.SA","JBSS3.SA",
     "BOVA11.SA","IVVB11.SA","SMAL11.SA"
 ]
 
-# ===============================
+# ======================================
+# VALIDAÇÃO DE SENHA (30 DIAS)
+# ======================================
+def validar_senha():
+    senha = input("Digite sua senha de acesso: ").strip()
+
+    try:
+        prefixo, data_str, codigo = senha.split("-")
+
+        if prefixo != PREFIXO_SENHA:
+            raise Exception
+
+        data_inicio = datetime.strptime(data_str, "%Y-%m-%d")
+        validade = data_inicio + timedelta(days=30)
+
+        if datetime.now() > validade:
+            print("\n❌ Licença expirada.")
+            sys.exit()
+
+        print("\n✅ Acesso liberado até:", validade.strftime("%d/%m/%Y"))
+
+    except:
+        print("\n❌ Senha inválida.")
+        sys.exit()
+
+# ======================================
 # FUNÇÕES AUXILIARES
-# ===============================
+# ======================================
 def classificar_ativo(ticker):
     if ticker.endswith("11.SA"):
         return "ETF"
@@ -51,22 +74,17 @@ def calcular_liquidez(ticker):
         return 0
 
 def top_ativos_liquidos(lista, qtd):
-    liquidez = []
-    for ativo in lista:
-        liquidez.append((ativo, calcular_liquidez(ativo)))
-    liquidez.sort(key=lambda x: x[1], reverse=True)
-    return [x[0] for x in liquidez[:qtd]]
+    dados = [(ativo, calcular_liquidez(ativo)) for ativo in lista]
+    dados.sort(key=lambda x: x[1], reverse=True)
+    return [x[0] for x in dados[:qtd]]
 
-# ===============================
-# TENDÊNCIA PRIMÁRIA
-# ===============================
+# ======================================
+# FILTROS DO SETUP (INVISÍVEL)
+# ======================================
 def tendencia_alta_semanal(df):
     df["MM200"] = ta.sma(df["Close"], length=200)
     return df["Close"].iloc[-1] > df["MM200"].iloc[-1]
 
-# ===============================
-# FILTRO SEMANAL
-# ===============================
 def filtro_semanal(ticker):
     df = yf.download(ticker, period="2y", interval="1wk", progress=False)
     if len(df) < 50:
@@ -80,9 +98,6 @@ def filtro_semanal(ticker):
         and tendencia_alta_semanal(df)
     )
 
-# ===============================
-# FILTRO DIÁRIO
-# ===============================
 def filtro_diario(ticker):
     df = yf.download(ticker, period="6mo", interval="1d", progress=False)
     if len(df) < 50:
@@ -101,9 +116,9 @@ def filtro_diario(ticker):
 
     return None
 
-# ===============================
+# ======================================
 # CÁLCULO DO TRADE
-# ===============================
+# ======================================
 def calcular_trade(df, ticker):
     classe = classificar_ativo(ticker)
     entrada = df["Close"].iloc[-1]
@@ -121,17 +136,17 @@ def calcular_trade(df, ticker):
     return {
         "Ativo": ticker.replace(".SA",""),
         "Classe": classe,
-        "Entrada": round(entrada,2),
-        "Stop": round(stop,2),
-        "Gain": round(gain,2),
-        "Loss %": -STOP_LOSS[classe]*100,
-        "Gain %": STOP_GAIN[classe]*100,
-        "R/R": round(rr,2)
+        "Entrada": round(entrada, 2),
+        "Stop": round(stop, 2),
+        "Gain": round(gain, 2),
+        "Loss %": -STOP_LOSS[classe] * 100,
+        "Gain %": STOP_GAIN[classe] * 100,
+        "R/R": round(rr, 2)
     }
 
-# ===============================
+# ======================================
 # EXECUÇÃO PRINCIPAL
-# ===============================
+# ======================================
 def executar_scanner():
     ativos = top_ativos_liquidos(ATIVOS_B3, QTDE_ATIVOS)
     resultados = []
@@ -151,10 +166,11 @@ def executar_scanner():
     df_final["Data"] = datetime.now().strftime("%Y-%m-%d")
     return df_final
 
-# ===============================
-# RODAR
-# ===============================
+# ======================================
+# START
+# ======================================
 if __name__ == "__main__":
+    validar_senha()
     tabela = executar_scanner()
-    print("\nATIVOS COM ENTRADA NO DIA:\n")
+    print("\n📊 ATIVOS COM ENTRADA NO DIA:\n")
     print(tabela)
