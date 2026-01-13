@@ -1,39 +1,64 @@
-from datetime import datetime, timedelta
-import sys
-import pandas as pd
+import streamlit as st
 import yfinance as yf
-from ta.momentum import StochasticOscillator
-from ta.trend import ADXIndicator
+import pandas as pd
+from datetime import datetime
 
-# ==================================================
-# CONTROLE DE ACESSO – SENHA VÁLIDA POR 30 DIAS
-# ==================================================
+# ================= CONFIGURAÇÕES =================
 
-def validar_senha():
-    senha = input("Digite sua senha de acesso: ").strip()
+SENHA = "CRUVINEL2026"
+DATA_EXPIRACAO = "2026-02-15"
 
-    try:
-        prefixo, data_str, _ = senha.split("-")
-        if prefixo != "CRUVI":
-            raise ValueError
+# Stops por tipo
+STOPS = {
+    "AÇÃO": {"loss": 0.05, "gain": 0.08},
+    "BDR": {"loss": 0.04, "gain": 0.06},
+    "ETF": {"loss": 0.03, "gain": 0.05},
+}
 
-        inicio = datetime.strptime(data_str, "%Y-%m-%d")
-        validade = inicio + timedelta(days=30)
+# ================= SEGURANÇA =================
 
-        if datetime.now() > validade:
-            print("❌ Licença expirada.")
-            sys.exit()
+hoje = datetime.now().date()
+expira = datetime.strptime(DATA_EXPIRACAO, "%Y-%m-%d").date()
 
-        print(f"✅ Acesso liberado até {validade.strftime('%d/%m/%Y')}")
-    except:
-        print("❌ Senha inválida.")
-        sys.exit()
+st.set_page_config(page_title="Scanner B3", layout="wide")
 
-# ==================================================
-# LISTA FIXA DE ATIVOS MAIS LÍQUIDOS DA B3 (~200)
-# ==================================================
+if hoje > expira:
+    st.error("Acesso expirado. Entre em contato para renovar.")
+    st.stop()
 
-ATIVOS = [
-"ABEV3.SA","ALPA4.SA","AMER3.SA","ARZZ3.SA","ASAI3.SA","AZUL4.SA",
-"B3SA3.SA","BBAS3.SA","BBDC3.SA","BBDC4.SA","BBSE3.SA","BPAC11.SA",
-"BRAP
+senha = st.text_input("Digite a senha:", type="password")
+if senha != SENHA:
+    st.stop()
+
+# ================= FUNÇÕES =================
+
+def estocastico(df):
+    low14 = df['Low'].rolling(14).min()
+    high14 = df['High'].rolling(14).max()
+    k = 100 * (df['Close'] - low14) / (high14 - low14)
+    d = k.rolling(3).mean()
+    return k, d
+
+def adx(df, n=14):
+    df['TR'] = pd.concat([
+        df['High'] - df['Low'],
+        abs(df['High'] - df['Close'].shift()),
+        abs(df['Low'] - df['Close'].shift())
+    ], axis=1).max(axis=1)
+
+    df['DM+'] = df['High'].diff()
+    df['DM-'] = df['Low'].diff().abs()
+
+    trn = df['TR'].rolling(n).sum()
+    dip = (df['DM+'].rolling(n).sum() / trn) * 100
+    din = (df['DM-'].rolling(n).sum() / trn) * 100
+
+    dx = abs(dip - din) / (dip + din) * 100
+    return dx.rolling(n).mean()
+
+# ================= LISTA AUTOMÁTICA =================
+
+tickers = yf.Tickers(" ".join([
+    "PETR4.SA VALE3.SA ITUB4.SA BBDC4.SA BBAS3.SA ABEV3.SA",
+    "WEGE3.SA B3SA3.SA PETR3.SA ITSA
+
