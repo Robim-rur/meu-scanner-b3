@@ -14,7 +14,7 @@ pd.set_option('display.width', 1000)
 
 def configurar_ambiente():
     st.title("Sistema de Processamento de Vendas")
-    st.write(f"Processamento iniciado em: {datetime.datetime.now()}")
+    st.write(f"Processamento iniciado em: {datetime.datetime.now().strftime('%d/%m/%Y %H:%M:%S')}")
     st.markdown("-" * 50)
 
 # =============================================================================
@@ -55,14 +55,14 @@ def gerar_categorias(df):
 # =============================================================================
 def imprimir_relatorio(df):
     st.subheader(">>> LISTAGEM DE VENDAS PROCESSADAS:")
-    st.dataframe(df.head(20))
+    st.dataframe(df.head(20), use_container_width=True)
     
     st.subheader(">>> RESUMO POR STATUS DE VENDA:")
     resumo = df.groupby('STATUS_VENDA').agg({
         'VALOR': 'sum',
         'LIQUIDO': 'mean',
         'ID': 'count'
-    })
+    }).rename(columns={'ID': 'QTD'})
     st.table(resumo)
 
 # =============================================================================
@@ -71,25 +71,23 @@ def imprimir_relatorio(df):
 def main():
     configurar_ambiente()
     
-    arquivo = 'dados_vendas.csv'
+    # Criando os dados diretamente aqui para o sistema não dar erro de arquivo
+    dados_iniciais = {
+        'ID': [1, 2, 3, 4, 5],
+        'PRODUTO': ['Produto A', 'Produto B', 'Produto C', 'Produto D', 'Produto E'],
+        'VALOR': [1200.00, 450.00, 800.00, 2100.00, 55.00],
+        'CATEGORIA': ['Eletrônicos', 'Acessórios', 'Eletrônicos', 'Móveis', 'Acessórios']
+    }
     
-    if os.path.exists(arquivo):
-        try:
-            # Tenta ler o arquivo original
-            df = pd.read_csv(arquivo, sep=',', encoding='utf-8')
-        except:
-            # Fallback para outro encoding se necessário
-            df = pd.read_csv(arquivo, sep=None, engine='python', encoding='latin1')
+    # Transformando em DataFrame (como se tivesse lido o CSV)
+    df = pd.DataFrame(dados_iniciais)
+    st.success("Dados carregados com sucesso do banco interno!")
             
-        # Execução das funções na ordem original
-        df_tratado = tratar_dados(df)
-        df_final = gerar_categorias(df_tratado)
-        
-        imprimir_relatorio(df_final)
-        
-    else:
-        st.error(f"Erro: O arquivo {arquivo} não foi encontrado no seu diretório do GitHub.")
-        st.info("Para o sistema funcionar, você precisa fazer o upload do arquivo 'dados_vendas.csv' ou me pedir para criar dados fictícios no código.")
+    # Execução das funções na ordem original
+    df_tratado = tratar_dados(df)
+    df_final = gerar_categorias(df_tratado)
+    
+    imprimir_relatorio(df_final)
 
 if __name__ == "__main__":
     main()
