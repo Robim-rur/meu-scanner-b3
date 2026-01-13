@@ -2,6 +2,7 @@ import streamlit as st
 import yfinance as yf
 import pandas as pd
 import numpy as np
+import plotly.graph_objects as go
 
 # 1. Configuração de página
 st.set_page_config(page_title="B3 VIP GOLD", layout="wide")
@@ -24,9 +25,8 @@ if not st.session_state.auth:
 # 3. INTERFACE
 st.title("Scanner B3 VIP GOLD")
 
-# LISTA EXPANDIDA PARA 210 ATIVOS (AÇÕES, ETFS E BDRS MAIS NEGOCIADOS)
+# LISTA EXPANDIDA PARA 250 ATIVOS
 ativos_full = [
-    # --- AÇÕES ---
     "RRRP3.SA", "ALOS3.SA", "ALPA4.SA", "ABEV3.SA", "ARZZ3.SA", "ASAI3.SA", "AZUL4.SA", "B3SA3.SA", 
     "BBAS3.SA", "BBDC3.SA", "BBDC4.SA", "BBSE3.SA", "BEEF3.SA", "BPAC11.SA", "BRAP4.SA", "BRFS3.SA", 
     "BRKM5.SA", "CCRO3.SA", "CIEL3.SA", "CMIG4.SA", "CMIN3.SA", "COGN3.SA", "CPFE3.SA", "CPLE6.SA", 
@@ -40,33 +40,29 @@ ativos_full = [
     "SLCE3.SA", "MOVI3.SA", "STBP3.SA", "SOMA3.SA", "PSSA3.SA", "RAPT4.SA", "RECV3.SA", "SIMH3.SA",
     "VULC3.SA", "AURE3.SA", "DIRR3.SA", "JHSF3.SA", "KEPL3.SA", "LEVE3.SA", "MDIA3.SA", "MYPK3.SA",
     "AMER3.SA", "GRND3.SA", "QUAL3.SA", "SMFT3.SA", "TASA4.SA", "TRIS3.SA", "WIZC3.SA", "ZAMP3.SA",
-    "PARD3.SA", "MEAL3.SA", "ODPV3.SA", "LOGG3.SA", "EVEN3.SA", "HBOR3.SA", "FRAS3.SA", "RANI3.SA",
-    "GOLL4.SA", "PETZ3.SA", "SULA11.SA", "STBP3.SA", "AMBP3.SA", "ORVR3.SA", "VIVA3.SA", "LJQQ3.SA",
-    # --- ETFs ---
+    "GOLL4.SA", "SULA11.SA", "AMBP3.SA", "ORVR3.SA", "VIVA3.SA", "LJQQ3.SA", "AESB3.SA", "AERI3.SA",
     "BOVA11.SA", "IVVB11.SA", "SMAL11.SA", "HASH11.SA", "QBTC11.SA", "GOLD11.SA", "XINA11.SA",
     "DIVO11.SA", "MATB11.SA", "IFRA11.SA", "TEKB11.SA", "BOVS11.SA", "SPXI11.SA", "EURP11.SA",
-    "NASD11.SA", "BBSD11.SA", "ECOO11.SA", "FIND11.SA", "GOVE11.SA", "MATB11.SA", "REIT11.SA",
-    # --- BDRs ---
-    "AAPL34.SA", "AMZO34.SA", "GOGL34.SA", "MSFT34.SA", "TSLA34.SA", "META34.SA", "NVDC34.SA",
-    "DISB34.SA", "NFLX34.SA", "BABA34.SA", "NIKE34.SA", "PYPL34.SA", "JPMC34.SA", "COCA34.SA",
-    "PEP34.SA", "MCDC34.SA", "SBUB34.SA", "INTC34.SA", "ORCL34.SA", "CSCO34.SA", "BERK34.SA",
-    "JNJB34.SA", "PFIZ34.SA", "WALM34.SA", "XOMP34.SA", "PGCO34.SA", "UPSB34.SA", "ADBE34.SA",
-    "CRMZ34.SA", "AVGO34.SA", "QCOM34.SA", "TXSA34.SA", "AMDZ34.SA", "ASML34.SA", "TEAM34.SA",
-    "COST34.SA", "TMUS34.SA", "AMAT34.SA", "MUCM34.SA", "LRCX34.SA", "INTU34.SA", "BKNG34.SA",
-    "SBUB34.SA", "GNRB34.SA", "CATP34.SA", "DEEC34.SA", "GEB34.SA", "HONB34.SA", "IBM34.SA"
+    "NASD11.SA", "BBSD11.SA", "ECOO11.SA", "FIND11.SA", "GOVE11.SA", "AAPL34.SA", "AMZO34.SA", 
+    "GOGL34.SA", "MSFT34.SA", "TSLA34.SA", "META34.SA", "NVDC34.SA", "DISB34.SA", "NFLX34.SA", 
+    "BABA34.SA", "NIKE34.SA", "PYPL34.SA", "JPMC34.SA", "COCA34.SA", "PEP34.SA", "MCDC34.SA", 
+    "BERK34.SA", "JNJB34.SA", "PFIZ34.SA", "WALM34.SA", "XOMP34.SA", "PGCO34.SA", "UPSB34.SA", 
+    "ADBE34.SA", "AVGO34.SA", "QCOM34.SA", "TXSA34.SA", "AMDZ34.SA", "ASML34.SA", "COST34.SA", 
+    "TMUS34.SA", "AMAT34.SA", "MUCM34.SA", "INTU34.SA", "BKNG34.SA", "CATP34.SA", "DEEC34.SA", 
+    "GEB34.SA", "HONB34.SA", "IBM34.SA", "INTC34.SA", "ORCL34.SA", "CSCO34.SA", "VIVR3.SA"
 ]
 
 ativos = sorted(list(set(ativos_full)))
 
 if st.button(f"🔍 INICIAR VARREDURA ({len(ativos)} ATIVOS)", use_container_width=True):
     resultados = []
+    lista_graficos = []
     progresso = st.progress(0)
     placeholder = st.empty()
     
     for i, ativo in enumerate(ativos):
         try:
             placeholder.text(f"Analisando: {ativo}")
-            
             df_d = yf.download(ativo, period="1y", interval="1d", progress=False)
             df_w = yf.download(ativo, period="2y", interval="1wk", progress=False)
 
@@ -87,7 +83,7 @@ if st.button(f"🔍 INICIAR VARREDURA ({len(ativos)} ATIVOS)", use_container_wid
             pi = 100 * pd.Series(np.where((u>d)&(u>0), u, 0), index=df_d.index).rolling(14).sum() / atr
             mi = 100 * pd.Series(np.where((d>u)&(d>0), d, 0), index=df_d.index).rolling(14).sum() / atr
 
-            # REGRAS DO SETUP ORIGINAL (TODAS AS 4)
+            # REGRAS DO SETUP ORIGINAL
             v_w = float(cl_w.iloc[-1]) > float(ema69_w.iloc[-1])
             v1 = float(cl_d.iloc[-1]) > float(ema69_d.iloc[-1])
             v2 = float(pi.iloc[-1]) > float(mi.iloc[-1])
@@ -96,8 +92,6 @@ if st.button(f"🔍 INICIAR VARREDURA ({len(ativos)} ATIVOS)", use_container_wid
 
             if v_w and v1 and v2 and v3 and v4:
                 entrada = float(cl_d.iloc[-1])
-                
-                # Definição de regras por classe
                 if "34" in ativo: 
                     classe, p_loss, p_gain = "BDR", 4, 6
                 elif "11" in ativo: 
@@ -105,15 +99,27 @@ if st.button(f"🔍 INICIAR VARREDURA ({len(ativos)} ATIVOS)", use_container_wid
                 else: 
                     classe, p_loss, p_gain = "Ação", 5, 7.5
 
+                s_loss = round(entrada * (1 - (p_loss/100)), 2)
+                s_gain = round(entrada * (1 + (p_gain/100)), 2)
+
                 resultados.append({
                     "Ativo": ativo.replace(".SA", ""),
                     "Classe": classe,
                     "Entrada (R$)": round(entrada, 2),
-                    "Stop Loss (R$)": round(entrada * (1 - (p_loss/100)), 2),
+                    "Stop Loss (R$)": s_loss,
                     "% Loss": f"-{p_loss}%",
-                    "Stop Gain (R$)": round(entrada * (1 + (p_gain/100)), 2),
+                    "Stop Gain (R$)": s_gain,
                     "% Gain": f"+{p_gain}%"
                 })
+
+                # Geração do Gráfico Plotly
+                fig = go.Figure(data=[go.Candlestick(x=df_d.index[-40:], open=df_d['Open'][-40:], high=df_d['High'][-40:], low=df_d['Low'][-40:], close=df_d['Close'][-40:], name="Candles")])
+                fig.add_hline(y=entrada, line_dash="dash", line_color="blue", annotation_text=f"Entrada: {round(entrada,2)}")
+                fig.add_hline(y=s_gain, line_dash="solid", line_color="green", annotation_text=f"GAIN: {s_gain} (+{p_gain}%)")
+                fig.add_hline(y=s_loss, line_dash="solid", line_color="red", annotation_text=f"LOSS: {s_loss} (-{p_loss}%)")
+                fig.update_layout(title=f"Gráfico de Operação: {ativo}", xaxis_rangeslider_visible=False, height=400)
+                lista_graficos.append(fig)
+
         except: continue
         progresso.progress((i + 1) / len(ativos))
 
@@ -122,7 +128,9 @@ if st.button(f"🔍 INICIAR VARREDURA ({len(ativos)} ATIVOS)", use_container_wid
 
     if resultados:
         st.table(pd.DataFrame(resultados))
+        st.divider()
+        st.subheader("Visualização das Operações")
+        for g in lista_graficos:
+            st.plotly_chart(g, use_container_width=True)
     else:
-        st.warning("Nenhum ativo encontrado com o setup completo hoje.")
-
-st.divider()
+        st.warning("Nenhum ativo passou por todos os filtros hoje.")
