@@ -3,121 +3,122 @@ import yfinance as yf
 import pandas as pd
 import numpy as np
 
-# 1. Configuração Inicial (DEVE ser a primeira linha de comando Streamlit)
 st.set_page_config(page_title="B3 VIP GOLD", layout="wide")
 
-# 2. SISTEMA DE LOGIN (Bloqueia tudo abaixo)
+# ======================
+# LOGIN
+# ======================
+SENHA = "mestre10"
+
 if "auth" not in st.session_state:
     st.session_state.auth = False
 
 if not st.session_state.auth:
-    st.markdown("<h2 style='text-align: center;'>🔐 ACESSO RESTRITO</h2>", unsafe_allow_html=True)
-    col_l, col_c, col_r = st.columns([1,1,1])
-    with col_c:
-        senha = st.text_input("Digite a Senha", type="password")
-        if st.button("LIBERAR SCANNER", use_container_width=True):
-            if senha == "mestre10":
-                st.session_state.auth = True
-                st.rerun()
-            else:
-                st.error("Senha Incorreta")
+    st.title("🔐 Acesso Restrito")
+    senha = st.text_input("Senha de acesso", type="password")
+    if st.button("Entrar"):
+        if senha == SENHA:
+            st.session_state.auth = True
+            st.rerun()
+        else:
+            st.error("Senha incorreta")
     st.stop()
 
-# 3. INTERFACE APÓS LOGIN
-st.title("📈 SCANNER B3 VIP GOLD")
-st.markdown("---")
+# ======================
+# CONFIGURAÇÃO
+# ======================
+st.title("📊 Scanner B3 VIP GOLD")
 
-# Lista de ativos para busca
+st.info(
+    "Os ativos listados abaixo **passaram pelo filtro do Setup VIP GOLD**.\n\n"
+    "O setup utiliza **múltiplos indicadores técnicos combinados**, "
+    "com análise de **tendência no semanal** e **entrada no diário**.\n\n"
+    "⚠️ O método não mostra todos os ativos — apenas os **tecnicamente autorizados**."
+)
+
+# Lista inicial
 ativos = [
-    "PETR4.SA", "VALE3.SA", "ITUB4.SA", "BBAS3.SA", "BBDC4.SA", 
-    "ABEV3.SA", "WEGE3.SA", "MGLU3.SA", "RENT3.SA", "PRIO3.SA",
-    "B3SA3.SA", "GOAU4.SA", "GGBR4.SA", "CSNA3.SA", "RAIZ4.SA",
-    "BOVA11.SA", "IVVB11.SA", "SMALL11.SA", "AAPL34.SA", "AMZO34.SA"
+    "PETR4.SA", "VALE3.SA", "ITUB4.SA", "BBAS3.SA",
+    "ABEV3.SA", "BBDC4.SA", "WEGE3.SA", "BOVA11.SA"
 ]
 
-if st.button("🚀 INICIAR VARREDURA AGORA", use_container_width=True):
-    resultados = []
-    progresso = st.progress(0)
-    status = st.empty()
+resultados = []
 
-    for i, ticker_sa in enumerate(ativos):
-        try:
-            status.text(f"Analisando {ticker_sa}...")
-            
-            # Download de dados
-            df_d = yf.download(ticker_sa, period="1y", interval="1d", progress=False)
-            df_w = yf.download(ticker_sa, period="2y", interval="1wk", progress=False)
+# ======================
+# LOOP PRINCIPAL
+# ======================
+for ativo in ativos:
+    # Coleta de dados
+    df_d = yf.download(ativo, period="1y", interval="1d", progress=False)
+    df_w = yf.download(ativo, period="2y", interval="1wk", progress=False)
 
-            if df_d.empty or df_w.empty:
-                continue
+    if df_d.empty or df_w.empty:
+        continue
 
-            # Ajuste de Colunas (yfinance fix)
-            if isinstance(df_d.columns, pd.MultiIndex): df_d.columns = df_d.columns.get_level_values(0)
-            if isinstance(df_w.columns, pd.MultiIndex): df_w.columns = df_w.columns.get_level_values(0)
+    # Limpeza para versões novas do yfinance
+    if isinstance(df_d.columns, pd.MultiIndex):
+        df_d.columns = df_d.columns.get_level_values(0)
+    if isinstance(df_w.columns, pd.MultiIndex):
+        df_w.columns = df_w.columns.get_level_values(0)
 
-            # --- LÓGICA SEMANAL ---
-            cl_w = df_w['Close']
-            m69_w = cl_w.ewm(span=69, adjust=False).mean()
-            
-            # Estocástico Semanal
-            low_w, high_w = df_w['Low'].rolling(14).min(), df_w['High'].rolling(14).max()
-            stk_w = 100 * ((cl_w - low_w) / (high_w - low_w)).rolling(3).mean()
+    close_d = df_d["Close"]
+    close_w = df_w["Close"]
 
-            # Filtros Semanais
-            ok_m69_w = float(cl_w.iloc[-1]) > float(m69_w.iloc[-1])
-            # Se o estocástico estiver caindo muito forte (diferença > 2 pontos), bloqueia
-            stoch_caindo = float(stk_w.iloc[-1]) < (float(stk_w.iloc[-2]) - 2.0)
+    # Média 69
+    ema69_d = close_d.ewm(span=69).mean()
+    ema69_w = close_w.ewm(span=69).mean()
 
-            if ok_m69_w and not stoch_caindo:
-                
-                # --- LÓGICA DIÁRIA (GATILHO) ---
-                cl_d = df_d['Close']
-                m69_d = cl_d.ewm(span=69, adjust=False).mean()
-                
-                # Estocástico Diário
-                low_d, high_d = df_d['Low'].rolling(14).min(), df_d['High'].rolling(14).max()
-                stk_d = 100 * ((cl_d - low_d) / (high_d - low_d)).rolling(3).mean()
+    # Estocástico Diário
+    low14 = df_d["Low"].rolling(14).min()
+    high14 = df_d["High"].rolling(14).max()
+    stoch_d = 100 * (close_d - low14) / (high14 - low14)
 
-                # DMI Diário
-                u, d = df_d['High'].diff(), -df_d['Low'].diff()
-                tr = pd.concat([df_d['High']-df_d['Low'], abs(df_d['High']-cl_d.shift()), abs(df_d['Low']-cl_d.shift())], axis=1).max(axis=1)
-                at_sum = tr.rolling(14).sum()
-                pi = 100 * (pd.Series(np.where((u>d)&(u>0), u, 0)).rolling(14).sum().values / at_sum.values)
-                mi = 100 * (pd.Series(np.where((d>u)&(d>0), d, 0)).rolling(14).sum().values / at_sum.values)
+    # DMI Diário - CORREÇÃO DE DIMENSÃO APLICADA AQUI
+    up = df_d["High"].diff()
+    down = -df_d["Low"].diff()
 
-                # OS 4 PILARES DO GATILHO
-                v1 = float(cl_d.iloc[-1]) > float(m69_d.iloc[-1])
-                v2 = float(pi[-1]) > float(mi[-1])
-                v3 = float(stk_d.iloc[-1]) < 80
-                v4 = float(cl_d.iloc[-1]) > float(df_d['High'].iloc[-2])
+    plus_dm = np.where((up > down) & (up > 0), up, 0.0)
+    minus_dm = np.where((down > up) & (down > 0), down, 0.0)
 
-                if v1 and v2 and v3 and v4:
-                    # Cálculo de Stop
-                    ticker = ticker_sa.replace(".SA", "")
-                    s_loss = 0.04 if ticker.endswith('34') else 0.05
-                    
-                    resultados.append({
-                        "ATIVO": ticker,
-                        "PREÇO": f"R$ {float(cl_d.iloc[-1]):.2f}",
-                        "STOP LOSS": f"R$ {float(cl_d.iloc[-1])*(1-s_loss):.2f}",
-                        "ALVO (GAIN)": f"R$ {float(cl_d.iloc[-1])*(1+(s_loss*1.5)):.2f}"
-                    })
+    tr = pd.concat([
+        df_d["High"] - df_d["Low"],
+        abs(df_d["High"] - close_d.shift()),
+        abs(df_d["Low"] - close_d.shift())
+    ], axis=1).max(axis=1)
 
-        except:
-            continue
-        
-        progresso.progress((i + 1) / len(ativos))
+    atr = tr.rolling(14).sum()
+    
+    # .flatten() garante que o array do numpy vire uma lista simples para o Pandas
+    di_plus = 100 * pd.Series(plus_dm.flatten(), index=df_d.index).rolling(14).sum() / atr
+    di_minus = 100 * pd.Series(minus_dm.flatten(), index=df_d.index).rolling(14).sum() / atr
 
-    status.empty()
-    progresso.empty()
+    # ======================
+    # REGRAS (Sincronizadas com seu original)
+    # ======================
 
-    if resultados:
-        st.success(f"Sinal de Compra Confirmado em {len(resultados)} ativos!")
-        st.dataframe(pd.DataFrame(resultados), use_container_width=True)
-    else:
-        st.warning("Nenhum ativo passou nos filtros hoje. O mercado pode estar em correção.")
+    # SEMANAL AUTORIZA
+    semanal_ok = float(close_w.iloc[-1]) > float(ema69_w.iloc[-1])
 
-st.sidebar.write("### Critérios VIP GOLD")
-st.sidebar.write("- Semanal acima da M69")
-st.sidebar.write("- Estocástico Semanal estável/subindo")
-st.sidebar.write("- Gatilhos técnicos no Diário")
+    # DIÁRIO ENTRA
+    diario_ok = (
+        float(close_d.iloc[-1]) > float(ema69_d.iloc[-1]) and
+        float(di_plus.iloc[-1]) > float(di_minus.iloc[-1]) and
+        float(stoch_d.iloc[-1]) < 80 and
+        float(close_d.iloc[-1]) > float(df_d["High"].iloc[-2])
+    )
+
+    if semanal_ok and diario_ok:
+        resultados.append({
+            "Ativo": ativo.replace(".SA", ""),
+            "Fechamento": round(float(close_d.iloc[-1]), 2)
+        })
+
+# ======================
+# RESULTADO
+# ======================
+if resultados:
+    df_resultado = pd.DataFrame(resultados)
+    st.success(f"{len(df_resultado)} ativos aprovados pelo Setup VIP GOLD")
+    st.dataframe(df_resultado, use_container_width=True)
+else:
+    st.warning("Nenhum ativo passou pelo filtro hoje. Mercado sem autorização técnica.")
