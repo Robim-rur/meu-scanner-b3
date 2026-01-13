@@ -12,26 +12,27 @@ st.set_page_config(page_title="Scanner de Sinais B3", layout="wide")
 
 def obter_indicadores_internos(df):
     """Cálculos proprietários do setup (ocultos do cliente)"""
+    # Estocástico 14,3,3
     stoch = ta.stoch(df['High'], df['Low'], df['Close'], k=14, d=3, smooth_k=3)
+    # ADX 14
     adx = ta.adx(df['High'], df['Low'], df['Close'], length=14)
     return pd.concat([df, stoch, adx], axis=1)
 
 # =============================================================================
-# 2. PARÂMETROS DE RISCO E CLASSIFICAÇÃO (LINHAS 26-60)
+# 2. PARÂMETROS DE RISCO E CLASSIFICAÇÃO (LINHAS 26-55)
 # =============================================================================
 def definir_alvos(ticker):
     """Define Stop Loss e Gain conforme a classe do ativo"""
     t = ticker.upper()
-    # Ações: L 5%, G 7.5% | BDRs: L 4%, G 6% | ETFs: L 3%, G 4.5%
     if t.endswith('34.SA'): 
         return 0.04, 0.06, "BDR"
     elif t.endswith('11.SA'): 
-        return 0.03, 0.045, "ETF"
+        return 0.03, 0.05, "ETF" # Ajustado para R/R > 1.5
     else: 
-        return 0.05, 0.075, "AÇÃO"
+        return 0.05, 0.08, "AÇÃO" # Ajustado para R/R > 1.5
 
 # =============================================================================
-# 3. MOTOR DE VARREDURA PRIVADO (LINHAS 61-90)
+# 3. MOTOR DE VARREDURA PRIVADO (LINHAS 56-90)
 # =============================================================================
 def processar_rastreio(ticker):
     """Executa a lógica de filtragem sem expor os critérios na tela"""
@@ -57,47 +58,45 @@ def processar_rastreio(ticker):
         if autoriza_diario:
             return df_d.iloc[-1]['Close']
         return None
-    except Exception:
+    except:
         return None
 
 # =============================================================================
-# 4. EXIBIÇÃO PARA O CLIENTE (LINHAS 91-115)
+# 4. EXIBIÇÃO PARA O CLIENTE (LINHAS 91-120)
 # =============================================================================
 def main():
-    st.title("🎯 Oportunidades Identificadas - B3")
-    st.write("Ativos que atingiram os critérios de entrada para operação hoje.")
-
-    # Lista organizada verticalmente para evitar erros de sintaxe (SyntaxError)
+    st.title("🎯 Scanner de Oportunidades - Mercado B3")
+    
+    # Lista de ativos que o cliente verá que estão sendo escaneados
     lista_ativos = [
-        "PETR4.SA", 
-        "VALE3.SA", 
-        "ITUB4.SA", 
-        "BBDC4.SA", 
-        "ABEV3.SA", 
-        "BBAS3.SA", 
-        "AAPL34.SA", 
-        "GOGL34.SA", 
-        "AMZO34.SA", 
-        "MSFT34.SA", 
-        "BOVA11.SA", 
-        "IVVB11.SA",
-        "WEGE3.SA", 
-        "RENT3.SA", 
-        "SUZB3.SA", 
-        "MGLU3.SA", 
-        "B3SA3.SA", 
-        "LREN3.SA"
+        "PETR4.SA", "VALE3.SA", "ITUB4.SA", "BBDC4.SA", "ABEV3.SA", "BBAS3.SA",
+        "JBSS3.SA", "ELET3.SA", "WEGE3.SA", "RENT3.SA", "SUZB3.SA", "MGLU3.SA",
+        "B3SA3.SA", "LREN3.SA", "HAPV3.SA", "GGBR4.SA", "CSNA3.SA", "RAIL3.SA",
+        "AAPL34.SA", "GOGL34.SA", "AMZO34.SA", "MSFT34.SA", "MELI34.SA", "TSLA34.SA",
+        "BOVA11.SA", "IVVB11.SA", "SMAL11.SA", "XINA11.SA", "NASD11.SA", "HASH11.SA"
     ]
     
+    st.subheader("📋 Ativos em Monitoramento:")
+    # Exibe os ativos de forma organizada para o cliente ver o que está sendo analisado
+    st.caption(", ".join([t.replace(".SA", "") for t in lista_ativos]))
+    
+    st.markdown("---")
+    
     hits = []
-    progresso = st.progress(0)
+    progresso_barra = st.progress(0)
+    status_texto = st.empty()
     
     for i, t in enumerate(lista_ativos):
+        ativo_nome = t.replace(".SA", "")
+        status_texto.text(f"Analisando: {ativo_nome}...")
+        
         preco_entrada = processar_rastreio(t)
+        
         if preco_entrada is not None:
             loss_p, gain_p, classe = definir_alvos(t)
+            # Risco/Retorno garantido no mínimo 1.5
             hits.append({
-                "ATIVO": t.replace(".SA", ""),
+                "ATIVO": ativo_nome,
                 "TIPO": classe,
                 "ENTRADA (R$)": round(float(preco_entrada), 2),
                 "STOP LOSS (R$)": round(float(preco_entrada * (1 - loss_p)), 2),
@@ -105,15 +104,19 @@ def main():
                 "STOP GAIN (R$)": round(float(preco_entrada * (1 + gain_p)), 2),
                 "GAIN (%)": f"{gain_p*100:.1f}%"
             })
-        progresso.progress((i + 1) / len(lista_ativos))
+        progresso_barra.progress((i + 1) / len(lista_ativos))
 
+    status_texto.text("Varredura completa!")
+    
+    st.subheader("🚀 Sinais de Entrada Confirmados:")
     if hits:
-        st.table(pd.DataFrame(hits))
+        df_final = pd.DataFrame(hits)
+        st.table(df_final)
     else:
-        st.info("Nenhuma nova entrada identificada para os ativos monitorados nesta sessão.")
+        st.info("Nenhum ativo da lista preencheu os critérios de entrada no momento.")
 
 # =============================================================================
-# 5. INICIALIZAÇÃO (LINHAS 116-132)
+# 5. INICIALIZAÇÃO (LINHAS 121-132)
 # =============================================================================
 if __name__ == "__main__":
     try:
