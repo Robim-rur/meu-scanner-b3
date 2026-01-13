@@ -27,10 +27,9 @@ if not st.session_state.auth:
 # ======================
 # INTERFACE PRINCIPAL
 # ======================
-st.title("📊 Scanner B3 VIP GOLD")
+st.title("📊 Scanner B3 VIP GOLD - Rígido")
 st.markdown("---")
 
-# Lista de ativos (Aumentei a lista para garantir que encontre sinais com filtros rigorosos)
 ativos = [
     "PETR4.SA", "VALE3.SA", "ITUB4.SA", "BBAS3.SA", "BBDC4.SA", 
     "ABEV3.SA", "WEGE3.SA", "MGLU3.SA", "RENT3.SA", "PRIO3.SA",
@@ -38,16 +37,15 @@ ativos = [
     "IVVB11.SA", "AAPL34.SA", "ELET3.SA", "VBBR3.SA", "RAIZ4.SA"
 ]
 
-if st.button("🔍 INICIAR VARREDURA (SEMANAL -> DIÁRIO)", use_container_width=True):
+if st.button("🔍 INICIAR VARREDURA RÍGIDA", use_container_width=True):
     resultados = []
     progresso = st.progress(0)
     status_placeholder = st.empty()
     
     for i, ticker in enumerate(ativos):
         try:
-            status_placeholder.text(f"Analisando tendência de {ticker}...")
+            status_placeholder.text(f"Analisando {ticker}...")
             
-            # Download de dados
             df_d = yf.download(ticker, period="1y", interval="1d", progress=False)
             df_w = yf.download(ticker, period="2y", interval="1wk", progress=False)
 
@@ -56,59 +54,61 @@ if st.button("🔍 INICIAR VARREDURA (SEMANAL -> DIÁRIO)", use_container_width=
             if isinstance(df_w.columns, pd.MultiIndex): df_w.columns = df_w.columns.get_level_values(0)
 
             # ==========================================
-            # 1. FILTRO DE AUTORIZAÇÃO (SEMANAL)
+            # 1. FILTRO DE AUTORIZAÇÃO (SEMANAL) - RÍGIDO
             # ==========================================
             cl_w = df_w["Close"]
-            hi_w, lo_w = df_w["High"], df_w["Low"]
+            m69_w = cl_w.ewm(span=69, adjust=False).mean() # A Média 69 é o filtro mestre
             
             # Estocástico Semanal (14,3,3)
-            stk_w_raw = 100 * ((cl_w - lo_w.rolling(14).min()) / (hi_w.rolling(14).max() - lo_w.rolling(14).min()))
-            k_w = stk_w_raw.rolling(3).mean()
+            low_w14 = df_w["Low"].rolling(14).min()
+            high_w14 = df_w["High"].rolling(14).max()
+            stk_w = 100 * ((cl_w - low_w14) / (high_w14 - low_w14)).rolling(3).mean()
+
+            # CONDIÇÕES SEMANAIS
+            cond_w1 = float(cl_w.iloc[-1]) > float(m69_w.iloc[-1]) # Preço ACIMA da média
+            cond_w2 = float(stk_w.iloc[-1]) >= float(stk_w.iloc[-2]) # Estocástico SUBINDO ou LATERAL
             
             # DMI Semanal
-            up_w, dw_w = hi_w.diff(), -lo_w.diff()
-            tr_w = pd.concat([hi_w-lo_w, abs(hi_w-cl_w.shift()), abs(lo_w-cl_w.shift())], axis=1).max(axis=1)
+            up_w, dw_w = df_w["High"].diff(), -df_w["Low"].diff()
+            tr_w = pd.concat([df_w["High"]-df_w["Low"], abs(df_w["High"]-cl_w.shift()), abs(df_w["Low"]-cl_w.shift())], axis=1).max(axis=1)
             atr_w = tr_w.rolling(14).sum()
             plus_w = 100 * (pd.Series(np.where((up_w>dw_w)&(up_w>0), up_w, 0)).rolling(14).sum().values / atr_w.values)
             minus_w = 100 * (pd.Series(np.where((dw_w>up_w)&(dw_w>0), dw_w, 0)).rolling(14).sum().values / atr_w.values)
+            cond_w3 = float(plus_w[-1]) > float(minus_w[-1]) # DMI+ > DMI-
 
-            # Verificação do Filtro Semanal
-            stoch_w_ok = float(k_w.iloc[-1]) >= float(k_w.iloc[-2]) # Inclinado para cima ou lateral
-            dmi_w_ok = float(plus_w[-1]) > float(minus_w[-1])      # D+ > D-
-
-            # SÓ CONTINUA SE O SEMANAL AUTORIZAR
-            if stoch_w_ok and dmi_w_ok:
-                
-                status_placeholder.text(f"✅ {ticker} Autorizado no Semanal! Checando gatilho diário...")
+            if cond_w1 and cond_w2 and cond_w3:
                 
                 # ==========================================
-                # 2. GATILHO DE ENTRADA (DIÁRIO)
+                # 2. GATILHO DE ENTRADA (DIÁRIO) - RÍGIDO
                 # ==========================================
                 cl_d = df_d["Close"]
-                hi_d, lo_d = df_d["High"], df_d["Low"]
+                m69_d = cl_d.ewm(span=69, adjust=False).mean()
                 
                 # Estocástico Diário (14,3,3)
-                stk_d_raw = 100 * ((cl_d - lo_d.rolling(14).min()) / (hi_d.rolling(14).max() - lo_d.rolling(14).min()))
-                k_d = stk_d_raw.rolling(3).mean() # %K
-                d_d = k_d.rolling(3).mean()       # %D
+                low_d14 = df_d["Low"].rolling(14).min()
+                high_d14 = df_d["High"].rolling(14).max()
+                k_d = 100 * ((cl_d - low_d14) / (high_d14 - low_d14)).rolling(3).mean()
+                d_d = k_d.rolling(3).mean()
 
                 # DMI Diário
-                up_d, dw_d = hi_d.diff(), -lo_d.diff()
-                tr_d = pd.concat([hi_d-lo_d, abs(hi_d-cl_d.shift()), abs(lo_d-cl_d.shift())], axis=1).max(axis=1)
+                up_d, dw_d = df_d["High"].diff(), -df_d["Low"].diff()
+                tr_d = pd.concat([df_d["High"]-df_d["Low"], abs(df_d["High"]-cl_d.shift()), abs(df_d["Low"]-cl_d.shift())], axis=1).max(axis=1)
                 atr_d = tr_d.rolling(14).sum()
                 plus_d = 100 * (pd.Series(np.where((up_d>dw_d)&(up_d>0), up_d, 0)).rolling(14).sum().values / atr_d.values)
                 minus_d = 100 * (pd.Series(np.where((dw_d>up_d)&(dw_d>0), dw_d, 0)).rolling(14).sum().values / atr_d.values)
 
-                # Verificação do Gatilho Diário
-                k_acima_d = float(k_d.iloc[-1]) > float(d_d.iloc[-1]) # %K acima de %D
-                dmi_d_ok = float(plus_d[-1]) > float(minus_d[-1])    # D+ acima de D-
+                # CONDIÇÕES DIÁRIAS
+                cond_d1 = float(cl_d.iloc[-1]) > float(m69_d.iloc[-1]) # Preço > M69 no Diário
+                cond_d2 = float(plus_d[-1]) > float(minus_d[-1])      # D+ > D- no Diário
+                cond_d3 = float(k_d.iloc[-1]) > float(d_d.iloc[-1])   # %K > %D (Cruzamento)
+                cond_d4 = float(cl_d.iloc[-1]) > float(df_d["High"].iloc[-2]) # Rompimento da Máxima anterior
 
-                if k_acima_d and dmi_d_ok:
+                if cond_d1 and cond_d2 and cond_d3 and cond_d4:
                     resultados.append({
                         "Ativo": ticker.replace(".SA", ""),
                         "Preço": f"R$ {float(cl_d.iloc[-1]):.2f}",
-                        "Filtro Semanal": "AUTORIZADO",
-                        "Gatilho Diário": "CONFIRMADO"
+                        "Filtro Semanal": "✅ OK",
+                        "Média 69": "✅ ACIMA"
                     })
 
         except: continue
@@ -118,10 +118,9 @@ if st.button("🔍 INICIAR VARREDURA (SEMANAL -> DIÁRIO)", use_container_width=
     progresso.empty()
 
     if resultados:
-        st.success(f"Sinal de Compra VIP GOLD detectado em {len(resultados)} ativos!")
-        st.dataframe(pd.DataFrame(resultados), use_container_width=True)
+        st.success(f"Foram encontrados {len(resultados)} ativos que passaram no filtro ultra-rígido!")
+        st.table(pd.DataFrame(resultados))
     else:
-        st.warning("Varredura concluída: Nenhum ativo passou pela sincronia Semanal -> Diário hoje.")
+        st.warning("Nenhum ativo passou nos filtros rigorosos hoje.")
 
-st.divider()
-st.caption("A varredura respeita a hierarquia de tempos gráficos: Primeiro a tendência no semanal, depois o gatilho no diário.")
+st.info("Este scanner usa: Preço > M69 (S/D), Estocástico Subindo (S), %K > %D (D), D+ > D- (S/D) e Rompimento de Máxima (D).")
