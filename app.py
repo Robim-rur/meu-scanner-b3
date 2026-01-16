@@ -3,73 +3,73 @@ import pandas as pd
 import yfinance as yf
 import pandas_ta as ta
 
-# =============================================================================
-# SETUP OPERACIONAL - AÇÕES B3 (EMA 69)
-# =============================================================================
 st.set_page_config(page_title="SCANNER AÇÕES - ELITE EMA 69", layout="wide")
 
 def calcular_indicadores(df):
     df = df.copy()
-    # Estocástico 14,3,3
     stoch = ta.stoch(df['High'], df['Low'], df['Close'], k=14, d=3, smooth_k=3)
-    # DMI/ADX 14
     adx_df = ta.adx(df['High'], df['Low'], df['Close'], length=14)
     return pd.concat([df, stoch, adx_df], axis=1).dropna()
 
 def analisar_ativo(ticker):
     try:
-        # Puxa 2 anos para garantir o cálculo da EMA 69 Semanal
         df_diario = yf.download(ticker, period="2y", interval="1d", progress=False)
         if df_diario is None or len(df_diario) < 100: return None
-        
         df_diario.columns = [col[0] if isinstance(col, tuple) else col for col in df_diario.columns]
-        
-        # --- FILTRO 1: SEMANAL (CONFIRMAÇÃO COM EMA 69) ---
+
+        # --------------------
+        # SEMANAL – FILTRO
+        # --------------------
         df_semanal = df_diario.resample('W').last()
         df_s = calcular_indicadores(df_semanal)
-        
-        # Média Móvel Exponencial de 69 períodos
         df_s['EMA69'] = ta.ema(df_s['Close'], length=69)
-        
         s = df_s.iloc[-1]
-        
-        # Regras Semanal: Preço > EMA69 + K > D + D+ > D- + ADX > 15
-        semanal_ok = (s['Close'] > s['EMA69']) and \
-                     (s['STOCHk_14_3_3'] > s['STOCHd_14_3_3']) and \
-                     (s['DMP_14'] > s['DMN_14']) and \
-                     (s['ADX_14'] > 15)
-        
+
+        semanal_ok = (
+            s['Close'] > s['EMA69'] and
+            s['STOCHk_14_3_3'] > s['STOCHd_14_3_3'] and
+            s['DMP_14'] > s['DMN_14'] and
+            s['ADX_14'] > 15
+        )
+
         if not semanal_ok: return None
 
-        # --- FILTRO 2: DIÁRIO (GATILHO DE ENTRADA) ---
+        # --------------------
+        # DIÁRIO – GATILHO
+        # --------------------
         df_d = calcular_indicadores(df_diario)
+        df_d['EMA69'] = ta.ema(df_d['Close'], length=69)
+
         d_atual = df_d.iloc[-1]
         d_anterior = df_d.iloc[-2]
-        
-        # DMI Diário: D+ > D- e ADX > 15
-        dmi_diario_ok = (d_atual['DMP_14'] > d_atual['DMN_14']) and (d_atual['ADX_14'] > 15)
-        
-        # Gatilho Estocástico: Cruzamento UP (K > D) feito hoje 
-        # E o valor de K deve estar no máximo em 35
-        cruzou_hoje = (d_atual['STOCHk_14_3_3'] > d_atual['STOCHd_14_3_3']) and \
-                      (d_anterior['STOCHk_14_3_3'] <= d_anterior['STOCHd_14_3_3'])
-        
-        gatilho_ok = cruzou_hoje and (d_atual['STOCHk_14_3_3'] <= 35)
 
-        if dmi_diario_ok and gatilho_ok:
+        preco_ok = d_atual['Close'] > d_atual['EMA69']
+        dmi_ok = d_atual['DMP_14'] > d_atual['DMN_14']
+        adx_ok = d_atual['ADX_14'] > 15
+
+        cruzou_hoje = (
+            d_atual['STOCHk_14_3_3'] > d_atual['STOCHd_14_3_3'] and
+            d_anterior['STOCHk_14_3_3'] <= d_anterior['STOCHd_14_3_3']
+        )
+
+        stoch_ok = cruzou_hoje and d_atual['STOCHk_14_3_3'] <= 35
+
+        if preco_ok and dmi_ok and adx_ok and stoch_ok:
             return {
                 "Preço": round(float(d_atual['Close']), 2),
                 "ADX_D": round(d_atual['ADX_14'], 1),
                 "StochK": round(d_atual['STOCHk_14_3_3'], 1),
                 "EMA69_S": round(float(s['EMA69']), 2)
             }
+
         return None
+
     except:
         return None
 
 def main():
     st.title("🏹 Scanner Ações B3 - Setup EMA 69")
-    st.write("Estratégia: Semanal (Preço > EMA 69) + Diário (Gatilho Estocástico < 35)")
+    st.write("Semanal: Tendência | Diário: Gatilho Estocástico ≤ 35")
 
     top_100 = [
         "PETR4.SA", "VALE3.SA", "ITUB4.SA", "BBDC4.SA", "BBAS3.SA", "ABEV3.SA", "JBSS3.SA", "ELET3.SA", "WEGE3.SA", "RENT3.SA",
@@ -87,12 +87,12 @@ def main():
         hits = []
         barra = st.progress(0)
         status = st.empty()
-        
+
         for i, ticker in enumerate(top_100):
             nome = ticker.replace(".SA", "")
             status.text(f"Analisando: {nome}...")
             res = analisar_ativo(ticker)
-            
+
             if res:
                 hits.append({
                     "ATIVO": nome,
@@ -102,9 +102,9 @@ def main():
                     "EMA 69 (Semanal)": res["EMA69_S"]
                 })
             barra.progress((i + 1) / len(top_100))
-        
+
         status.success("Varredura concluída!")
-        
+
         if hits:
             st.table(pd.DataFrame(hits))
         else:
@@ -112,3 +112,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
